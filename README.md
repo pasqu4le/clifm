@@ -22,7 +22,7 @@ If your terminal supports a mouse you can use it to change tab, click a button o
 - DownArrow: move the selection in the current Tab one Item down
 - Ctrl+UpArrow: move the selection in the current Tab to the Item on the top
 - Ctrl+DownArrow: move the selection in the current Tab to the Item on the bottom
-- Enter: **O**pen the selected directory1
+- Enter: Open the selected directory
 - Tab: Move to the next tab
 - BackTab: Move to the previous tab
 - Ctrl+LeftArrow: Swap current tab's position with the previous one
@@ -44,6 +44,7 @@ If your terminal supports a mouse you can use it to change tab, click a button o
 The actions above will not work only if a prompt is up, or you try to do something not possible.
 
 ## TODOs
+- treaded IO operations (that do not freeze the UI and can be canceled)
 - performance optimizations (especially in the tab rendering)
 - support for external text editors
 - support for themes
