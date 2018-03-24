@@ -1,7 +1,7 @@
 # Command Line Interface File Manager
 Clifm is a small file manager written in Haskell with a command line interface. It allows you to explore directories in multiple tabs and perform basic operations.
 
-![](screenshot.png)
+[![asciicast](https://asciinema.org/a/LHfaWHtFKzp9KAYGEiGpns3mR.png)](https://asciinema.org/a/LHfaWHtFKzp9KAYGEiGpns3mR)
 
 Note: this is still an experiment and might be unstable. I do not recommend using it as your daily File Manager and I take no responsibility on what you do with it.
 
@@ -45,7 +45,11 @@ The actions above will not work only if a prompt is up, or you try to do somethi
 
 ## TODOs
 - treaded IO operations (that do not freeze the UI and can be canceled)
-- performance optimizations (especially in the tab rendering)
+- performance optimizations (especially in the tab rendering, probably using Brick.Widgets.List)
 - support for external text editors
 - support for themes
 - settings (probably using command line arguments)
+- mc directory comparison
+- multi-pane view
+- listing more properties (especially directories size)
+-
