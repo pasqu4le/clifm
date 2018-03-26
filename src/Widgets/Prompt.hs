@@ -95,7 +95,7 @@ renderBody pr = vBox $ case action pr of
 
 tellEntry :: Entry -> String
 tellEntry e = case e of
-  DirEntry name _ -> "The directory " <> name <> " (and all it's content)"
+  DirEntry name _ _ -> "The directory " <> name <> " (and all it's content)"
   FileEntry name _ _ -> "The file " <> name
 
 disclaimer :: Widget Name
@@ -141,13 +141,13 @@ tryProcessAction pr = do
 processAction :: Prompt -> IO Tab
 processAction (Prompt tab act) = case act of
   Copy (FileEntry _ fPath _) path -> copyFileWithMetadata fPath (path </> takeFileName fPath) *> reload tab
-  Copy (DirEntry _ dPath) path -> copyDirectoryRecursive dPath (path </> takeFileName dPath) *> reload tab
+  Copy (DirEntry _ dPath _) path -> copyDirectoryRecursive dPath (path </> takeFileName dPath) *> reload tab
   Cut (FileEntry _ fPath _) path -> moveFileWithMetadata fPath (path </> takeFileName fPath) *> reload tab
-  Cut (DirEntry _ dPath) path -> moveDirectoryRecursive dPath (path </> takeFileName dPath) *> reload tab
+  Cut (DirEntry _ dPath _) path -> moveDirectoryRecursive dPath (path </> takeFileName dPath) *> reload tab
   Rename edit (FileEntry _ fPath _) -> renameFile fPath (takeDirectory fPath </> getEditLine edit) *> reload tab
-  Rename edit (DirEntry _ dPath) -> moveDirectoryRecursive dPath (takeDirectory dPath </> getEditLine edit) *> reload tab
+  Rename edit (DirEntry _ dPath _) -> moveDirectoryRecursive dPath (takeDirectory dPath </> getEditLine edit) *> reload tab
   Delete (FileEntry _ path _) -> removeFile path *> reload tab
-  Delete (DirEntry _ path) -> removeDirectoryRecursive path *> reload tab
+  Delete (DirEntry _ path _) -> removeDirectoryRecursive path *> reload tab
   Mkdir edit path -> createDirectory (path </> getEditLine edit) *> reload tab
   Touch edit path -> writeFile (path </> getEditLine edit) "" *> reload tab
   GoTo edit -> processGoTo $ getEditLine edit

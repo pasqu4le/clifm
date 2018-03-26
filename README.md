@@ -40,6 +40,8 @@ If your terminal supports a mouse you can use it to change tab, click a button o
 
 The actions above will not work only if a prompt is up, or you try to do something not possible.
 
+> NOTE: directory size is not guaranteed to be accurate, the function in the `directory` library seems to be filesystem/platform dependent and visiting a directory tree to sum it's files sizes takes way too much time. Until a better solution is found the directory size will still be shown, but do not trust what it says.
+
 ## Command line arguments
 You can have a list of command line arguments by running `clifm --help`.
 
@@ -90,4 +92,6 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 - more settings (using command line arguments)
 - mc directory comparison
 - multi-pane view
-- listing more properties (especially directories size)
+- listing more properties
+- sorting based on file size or date
+- find a way to read correctly a directory size

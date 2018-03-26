@@ -14,8 +14,8 @@ import Brick.Widgets.Border.Style (unicodeRounded, unicodeBold, bsHorizontal, bs
 import Graphics.Vty (Event)
 
 data Tab = DirTab {tabName :: String, tabPath :: FilePath, entryList :: List Name Entry} | EmptyTab
-data Entry = DirEntry {entryName :: String, entryPath :: FilePath} |
-  FileEntry {entryName :: String, entryPath :: FilePath, entrySize :: String} deriving Show
+data Entry = DirEntry {entryName :: String, entryPath :: FilePath, entrySize :: Integer} |
+  FileEntry {entryName :: String, entryPath :: FilePath, entrySize :: Integer} deriving Show
 
 instance Eq Tab where
   EmptyTab == EmptyTab = True
@@ -44,17 +44,15 @@ makeEntryList :: FilePath -> IO (List Name Entry)
 makeEntryList dir = do
   sub <- listDirectory dir
   entries <- mapM (makeEntry . (dir </>)) sub
-  let upDir = DirEntry ".." $ takeDirectory dir
-  return $ list EList (fromList $ sortOn (map toLower . entryName) entries) 1
+  let upPath = takeDirectory dir
+  upDir <- DirEntry ".." upPath <$> getFileSize upPath
+  return $ list EList (fromList . (upDir :) $ sortOn (map toLower . entryName) entries) 1
 
 makeEntry :: FilePath -> IO Entry
 makeEntry path = do
   isFile <- doesFileExist path
-  if isFile then do
-    size <- getFileSize path
-    return . FileEntry (takeFileName path) path $ (show size ++ " B")
-  else
-    return $ DirEntry (takeFileName path) path
+  if isFile then FileEntry (takeFileName path) path <$> getFileSize path
+  else DirEntry (takeFileName path) path <$> getFileSize path
 
 -- rendering functions
 renderLabel :: Bool -> Tab -> Widget Name
@@ -91,8 +89,8 @@ renderContent EmptyTab = vBox (lns ++ [fill ' '])
 
 renderEntry :: Bool -> Entry -> Widget Name
 renderEntry _ entry = vLimit 1 $ case entry of
-      DirEntry n _ -> hBox [str "+ " <+> str n, fill ' ']
-      FileEntry n _ s -> hBox [str "- " <+> str n, fill ' ', str (' ':s)]
+      DirEntry n _ s -> hBox [str "+ " <+> str n, fill ' ', str (" " ++ show s ++ " B")]
+      FileEntry n _ s -> hBox [str "- " <+> str n, fill ' ', str (" " ++ show s ++ " B")]
 
 tabButtons :: Tab -> [(Widget Name, Char)]
 tabButtons DirTab {} = [
@@ -117,7 +115,7 @@ handleTabEvent event (DirTab n p enList) = do
 
 openEntry :: Tab -> IO (Maybe Tab)
 openEntry (DirTab _ _ enList) = case listSelectedElement enList of
-  Just (_, (DirEntry _ path)) -> Just <$> makeDirTab path
+  Just (_, (DirEntry _ path _)) -> Just <$> makeDirTab path
   _ -> return Nothing
 openEntry _ = return Nothing
 
