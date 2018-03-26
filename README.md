@@ -18,15 +18,12 @@ Clifm is a [brick](https://github.com/jtdaugherty/brick) application, that in tu
 
 If your terminal supports a mouse you can use it to change tab, click a button on the bottom or change your selection, but only using the keyboard you can perform every possible action. This is the list of all the keybindings:
 
-- UpArrow: move the selection in the current Tab one Item up
-- DownArrow: move the selection in the current Tab one Item down
-- Ctrl+UpArrow: move the selection in the current Tab to the Item on the top
-- Ctrl+DownArrow: move the selection in the current Tab to the Item on the bottom
+- Up/Down Arrow keys: move the selection in the current Tab
+- PageUp/PageDown keys: move the selection in the current Tab by one page at a time
+- Home/End keys: move the selection in the current Tab to beginning or end of list
 - Enter: Open the selected directory
-- Tab: Move to the next tab
-- BackTab: Move to the previous tab
-- Ctrl+LeftArrow: Swap current tab's position with the previous one
-- Ctrl+RightArrow: Swap current tab's position with the next one
+- Tab/BackTab: Move to the next/previous tab
+- Ctrl+Left/Right Arrow: Swap current tab's position with the previous/next one
 - Esc or Ctrl+q: **Q**uit
 - Ctrl+x: Cut the selected Item
 - Ctrl+c: Copy the selected Item
@@ -45,11 +42,9 @@ The actions above will not work only if a prompt is up, or you try to do somethi
 
 ## TODOs
 - treaded IO operations (that do not freeze the UI and can be canceled)
-- performance optimizations (especially in the tab rendering, probably using Brick.Widgets.List)
 - support for external text editors
 - support for themes
 - settings (probably using command line arguments)
 - mc directory comparison
 - multi-pane view
 - listing more properties (especially directories size)
--

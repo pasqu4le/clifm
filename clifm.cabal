@@ -71,7 +71,8 @@ executable clifm
                        optparse-applicative >=0.14 && <0.15,
                        brick >=0.34 && <0.35,
                        filepath >=1.4 && <1.5,
-                       vty >= 5.17 && <6
+                       vty >= 5.17 && <6,
+                       vector >= 0.12 && <0.13
 
   -- Directories containing source files.
   hs-source-dirs:      src

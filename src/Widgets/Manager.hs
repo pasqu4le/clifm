@@ -35,7 +35,7 @@ renderMainUI state = vBox [labels, topSep, content, botSep,  menu]
     zipper = tabZipper state
     labels = vLimit 2 . viewport LScroll Horizontal $ renderLabels zipper
     topSep = renderPathSeparator $ current zipper
-    content = viewport VScroll Vertical . clickable VScroll . renderContent $ current zipper
+    content = clickable EList . renderContent $ current zipper
     botSep = withBorderStyle unicodeBold hBorder
     menu = vLimit 3 $ renderMenu state
 
@@ -90,17 +90,17 @@ handleMain (VtyEvent ev) = case ev of
   EvKey (KChar 't') [MCtrl] -> openPrompt makeTouchPrompt
   EvKey (KChar 'g') [MCtrl] -> openPrompt makeGoToPrompt
   EvKey (KChar 'n') [MCtrl] -> updateZipper (insertRightAndFocus makeEmptyTab)
-  EvKey (KChar 'o') [MCtrl] -> updateZipperIO (openTabEntry True)
-  EvKey (KChar 'l') [MCtrl] -> updateZipperIO reloadCurrentTab
+  EvKey (KChar 'o') [MCtrl] -> updateZipperEv (openTabEntry True)
+  EvKey (KChar 'l') [MCtrl] -> updateZipperEv reloadCurrentTab
   EvKey (KChar 'k') [MCtrl] -> updateZipper (remove makeEmptyTab)
   EvKey (KChar '\t') [] -> updateZipper nextCiclical
   EvKey KBackTab [] -> updateZipper prevCiclical
   EvKey KLeft [MCtrl] -> updateZipper swapPrevCiclical
   EvKey KRight [MCtrl] -> updateZipper swapNextCiclical
-  EvKey KEnter [] -> updateZipperIO (openTabEntry False)
-  _ -> updateZipperIO (updateCurrentTab ev)
+  EvKey KEnter [] -> updateZipperEv (openTabEntry False)
+  _ -> updateZipperEv (updateCurrentTab ev)
 handleMain (MouseUp name _ (Location pos)) = case name of
-  VScroll -> updateZipper (moveTabToRow $ snd pos)
+  EList -> updateZipper (moveTabToRow $ snd pos)
   (LNum n) -> updateZipper (moveToNth n)
   (BVal c) -> handleMain (VtyEvent (EvKey (KChar c) [MCtrl]))
   _ -> continue
@@ -124,22 +124,22 @@ openPrompt f (State z c _) = continue . State z c . Just . f $ current z
 openPromptWithClip :: (Clipboard -> Tab -> Prompt) -> State -> EventM Name (Next State)
 openPromptWithClip f (State z c _) = continue . State z c . Just . f c $ current z
 
-updateZipperIO :: (Tab -> IO (TabZipper -> TabZipper)) -> State -> EventM Name (Next State)
-updateZipperIO inputFunc s = do
-  func <- liftIO . inputFunc . current $ tabZipper s
+updateZipperEv :: (Tab -> EventM Name (TabZipper -> TabZipper)) -> State -> EventM Name (Next State)
+updateZipperEv inputFunc s = do
+  func <- inputFunc . current $ tabZipper s
   updateZipper func s
 
-openTabEntry :: Bool -> Tab -> IO (TabZipper -> TabZipper)
+openTabEntry :: Bool -> Tab -> EventM Name (TabZipper -> TabZipper)
 openTabEntry inNew tab = do
-  tabRes <- openEntry tab
+  tabRes <- liftIO $ openEntry tab
   return $ case tabRes of
     Just t -> (if inNew then insertRight else replace) t
     _ -> id
 
-reloadCurrentTab :: Tab -> IO (TabZipper -> TabZipper)
-reloadCurrentTab tab = replace <$> reload tab
+reloadCurrentTab :: Tab -> EventM Name (TabZipper -> TabZipper)
+reloadCurrentTab tab = replace <$> (liftIO $ reload tab)
 
-updateCurrentTab :: Event -> Tab -> IO (TabZipper -> TabZipper)
+updateCurrentTab :: Event -> Tab -> EventM Name (TabZipper -> TabZipper)
 updateCurrentTab ev tab = replace <$> handleTabEvent ev tab
 
 -- tab and tabZipper utility functions
