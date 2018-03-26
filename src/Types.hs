@@ -1,6 +1,7 @@
 module Types where
 
 import Data.Monoid ((<>))
+import Brick.Themes (Theme, newTheme)
 import Brick.AttrMap (AttrName, AttrMap, attrName, attrMap)
 import Graphics.Vty (defAttr, withStyle, underline, black, yellow, white, blue, red)
 import Brick.Util (on, fg, bg)
@@ -10,9 +11,9 @@ import Brick.Widgets.List (listSelectedFocusedAttr)
 -- names
 data Name = BVal Char | LScroll | LNum Int | PEdit | EList deriving (Ord, Show, Eq)
 
--- attributes
-attributes :: AttrMap
-attributes = attrMap defAttr [
+-- attributes and themes
+defaultTheme :: Theme
+defaultTheme = newTheme (white `on` black) [
     (listSelectedFocusedAttr, black `on` yellow),
     (keybindAttr, fg white `withStyle` underline),
     (promptAttr, bg blue),
