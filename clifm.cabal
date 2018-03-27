@@ -72,7 +72,8 @@ executable clifm
                        brick >=0.34 && <0.35,
                        filepath >=1.4 && <1.5,
                        vty >= 5.17 && <6,
-                       vector >= 0.12 && <0.13
+                       vector >= 0.12 && <0.13,
+                       time >=1.8 && <1.10
 
   -- Directories containing source files.
   hs-source-dirs:      src

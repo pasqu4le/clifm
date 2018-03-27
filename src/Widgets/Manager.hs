@@ -89,6 +89,7 @@ handleMain (VtyEvent ev) = case ev of
   EvKey (KChar 'a') [MCtrl] -> openPrompt makeMkdirPrompt
   EvKey (KChar 't') [MCtrl] -> openPrompt makeTouchPrompt
   EvKey (KChar 'g') [MCtrl] -> openPrompt makeGoToPrompt
+  EvKey (KChar 's') [MCtrl] -> openPrompt makeDisplayInfoPrompt
   EvKey (KChar 'n') [MCtrl] -> updateZipper (insertRightAndFocus makeEmptyTab)
   EvKey (KChar 'o') [MCtrl] -> updateZipperEv (openTabEntry True)
   EvKey (KChar 'l') [MCtrl] -> updateZipperEv reloadCurrentTab

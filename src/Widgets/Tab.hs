@@ -4,8 +4,13 @@ import Types
 import Data.List (sortOn)
 import Data.Char (toLower)
 import Data.Vector (fromList)
+import Data.Maybe (fromMaybe)
+import Data.Time.Clock (UTCTime)
+import Data.Time.Format (formatTime, defaultTimeLocale)
+import Control.Exception (try, SomeException)
 import System.FilePath (takeFileName, takeDirectory, (</>))
-import System.Directory (doesDirectoryExist, doesFileExist, getFileSize, listDirectory)
+import System.Directory (Permissions, getPermissions, readable, writable, executable, searchable,
+  getAccessTime, getModificationTime, doesDirectoryExist, doesFileExist, getFileSize, listDirectory)
 import Brick.Types (Widget, EventM)
 import Brick.Widgets.Core (hLimit, vLimit, hBox, vBox, (<+>), str, strWrap, fill, withBorderStyle, withDefAttr, visible)
 import Brick.Widgets.List (List, list, renderList, handleListEvent, listMoveTo, listSelectedElement)
@@ -14,8 +19,9 @@ import Brick.Widgets.Border.Style (unicodeRounded, unicodeBold, bsHorizontal, bs
 import Graphics.Vty (Event)
 
 data Tab = DirTab {tabName :: String, tabPath :: FilePath, entryList :: List Name Entry} | EmptyTab
-data Entry = DirEntry {entryName :: String, entryPath :: FilePath, entrySize :: Integer} |
-  FileEntry {entryName :: String, entryPath :: FilePath, entrySize :: Integer} deriving Show
+data Entry = DirEntry {entryName :: String, entryPath :: FilePath, entryInfo :: EntryInfo} |
+  FileEntry {entryName :: String, entryPath :: FilePath, entryInfo :: EntryInfo}
+data EntryInfo = EntryInfo {entrySize :: Integer, entryPerms :: Maybe Permissions, entryTimes :: Maybe (UTCTime, UTCTime)} deriving Show
 
 instance Eq Tab where
   EmptyTab == EmptyTab = True
@@ -25,6 +31,10 @@ instance Eq Tab where
 instance Show Tab where
   show EmptyTab = "-new tab-"
   show (DirTab name _ _) = name
+
+instance Show Entry where
+  show (DirEntry n _ _) = "+ " ++ n
+  show (FileEntry n _ _) = "- " ++ n
 
 -- creation functions
 makeEmptyTab :: Tab
@@ -45,14 +55,27 @@ makeEntryList dir = do
   sub <- listDirectory dir
   entries <- mapM (makeEntry . (dir </>)) sub
   let upPath = takeDirectory dir
-  upDir <- DirEntry ".." upPath <$> getFileSize upPath
+  upDir <- DirEntry ".." upPath <$> makeEntryInfo upPath
   return $ list EList (fromList . (upDir :) $ sortOn (map toLower . entryName) entries) 1
 
 makeEntry :: FilePath -> IO Entry
 makeEntry path = do
   isFile <- doesFileExist path
-  if isFile then FileEntry (takeFileName path) path <$> getFileSize path
-  else DirEntry (takeFileName path) path <$> getFileSize path
+  if isFile then FileEntry (takeFileName path) path <$> makeEntryInfo path
+  else DirEntry (takeFileName path) path <$> makeEntryInfo path
+
+makeEntryInfo :: FilePath -> IO EntryInfo
+makeEntryInfo path = do
+  size <- getFileSize path
+  perms <- toMaybe <$> (try $ getPermissions path)
+  times <- toMaybe <$> (try $ getEntryTimes path)
+  return $ EntryInfo size perms times
+
+getEntryTimes :: FilePath -> IO (UTCTime, UTCTime)
+getEntryTimes path = do
+  accessTime <- getAccessTime path
+  modifTime <- getModificationTime path
+  return (accessTime, modifTime)
 
 -- rendering functions
 renderLabel :: Bool -> Tab -> Widget Name
@@ -88,9 +111,28 @@ renderContent EmptyTab = vBox (lns ++ [fill ' '])
     \them as Ctrl+Key combination.\n \nTo see them all please refer to the README"
 
 renderEntry :: Bool -> Entry -> Widget Name
-renderEntry _ entry = vLimit 1 $ case entry of
-      DirEntry n _ s -> hBox [str "+ " <+> str n, fill ' ', str (" " ++ show s ++ " B")]
-      FileEntry n _ s -> hBox [str "- " <+> str n, fill ' ', str (" " ++ show s ++ " B")]
+renderEntry _ en = let info = entryInfo en in vLimit 1 $ hBox [
+    str $ show en,
+    fill ' ',
+    str (" " ++ show (entrySize info) ++ " B"),
+    renderEntryPerms $ entryPerms info,
+    renderEntryTime (entryTimes info) False
+  ]
+
+renderEntryPerms :: Maybe Permissions -> Widget Name
+renderEntryPerms Nothing = str " ----"
+renderEntryPerms (Just p) = str [
+    ' ',
+    (if readable p then 'r' else '-'),
+    (if writable p then 'w' else '-'),
+    (if executable p then 'x' else '-'),
+    (if searchable p then 's' else '-')
+  ]
+
+renderEntryTime :: Maybe (UTCTime, UTCTime) -> Bool -> Widget Name
+renderEntryTime Nothing _ = str " -----------------"
+renderEntryTime (Just tms) sel = str . format $ (if sel then fst else snd) tms
+  where format = formatTime defaultTimeLocale " %R %b %e %Y"
 
 tabButtons :: Tab -> [(Widget Name, Char)]
 tabButtons DirTab {} = [
@@ -101,6 +143,7 @@ tabButtons DirTab {} = [
     (withDefAttr keybindAttr (str "d") <+> str "elete", 'd'),
     (str "m" <+> withDefAttr keybindAttr (str "a") <+> str "ke dir", 'm'),
     (withDefAttr keybindAttr (str "t") <+> str "ouch file", 't'),
+    (withDefAttr keybindAttr (str "s") <+> str "how info", 's'),
     (str "re" <+> withDefAttr keybindAttr (str "l") <+> str "oad", 'l'),
     (withDefAttr keybindAttr (str "o") <+> str "pen in new tab", 'o')
   ]
@@ -138,3 +181,6 @@ selectedEntry EmptyTab = Nothing
 selectedEntry (DirTab _ _ enList) = case listSelectedElement enList of
   Just (_, entry) -> Just entry
   _ -> Nothing
+
+toMaybe :: Either SomeException b -> Maybe b
+toMaybe = either (\_ -> Nothing) (Just)

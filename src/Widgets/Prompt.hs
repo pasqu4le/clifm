@@ -14,15 +14,17 @@ import Brick.Types (Widget, EventM)
 import Brick.Widgets.Center (centerLayer, hCenter)
 import Brick.Widgets.Edit (Editor, editor, renderEditor, getEditContents, handleEditorEvent)
 import Graphics.Vty (Event(EvKey), Key(..))
+import Data.Time.Format (formatTime, defaultTimeLocale)
 import System.FilePath (isValid, takeDirectory, (</>), takeFileName)
 import System.Directory (doesFileExist, doesDirectoryExist, createDirectory, renameFile,
-  copyFileWithMetadata, renameFile, removeFile, removeDirectoryRecursive, getDirectoryContents)
+  copyFileWithMetadata, renameFile, removeFile, removeDirectoryRecursive, getDirectoryContents,
+  readable, writable, executable, searchable)
 
 data Prompt = Prompt {originTab :: Tab, action :: PromptAction} deriving Show
 type PathEditor = Editor FilePath Name
 data PromptAction = Copy Entry FilePath | Cut Entry FilePath | Rename PathEditor Entry |
   Delete Entry | Mkdir PathEditor FilePath | Touch PathEditor FilePath |
-  GoTo PathEditor | DisplayError String
+  GoTo PathEditor | DisplayInfo EntryInfo | DisplayError String
 
 instance Show PromptAction where
   show (Copy _ _) = " Copy "
@@ -32,6 +34,7 @@ instance Show PromptAction where
   show (Mkdir _ _) = " Make Directory "
   show (Touch _ _) = " Touch File "
   show (GoTo _) = " Go To "
+  show (DisplayInfo _) = " Entry Info "
   show _ = " Error "
 
 -- creation functions
@@ -64,6 +67,9 @@ makeMkdirPrompt = withTabPath (Mkdir emptyPathEditor)
 makeTouchPrompt :: Tab -> Prompt
 makeTouchPrompt = withTabPath (Touch emptyPathEditor)
 
+makeDisplayInfoPrompt :: Tab -> Prompt
+makeDisplayInfoPrompt = withSelectedEntry (DisplayInfo . entryInfo)
+
 withSelectedEntry :: (Entry -> PromptAction) -> Tab -> Prompt
 withSelectedEntry func tab = Prompt tab $ case selectedEntry tab of
   Just entry -> func entry
@@ -91,7 +97,28 @@ renderBody pr = vBox $ case action pr of
   Mkdir edit _ -> str "Directory name:" : renderValidatedEditor edit
   Touch edit _ -> str "File name:" : renderValidatedEditor edit
   GoTo edit -> str "Directory to open:" : renderValidatedEditor edit
+  DisplayInfo info -> map strWrap . (displaySize info :) $ displayPerms info ++ displayTimes info
   DisplayError msg -> [str "Whoops, this went wrong:", withDefAttr errorAttr $ strWrap msg]
+
+displaySize :: EntryInfo -> String
+displaySize info = "Size: " ++ show (entrySize info) ++ " Bytes"
+
+displayPerms :: EntryInfo -> [String]
+displayPerms info = case entryPerms info of
+  Nothing -> [" ", "Permissions unknown", "(could not read them)"]
+  Just p -> [
+      " ",
+      "Is readable: " <> (if readable p then "yes" else "no"),
+      "Is writable: " <> (if writable p then "yes" else "no"),
+      "Is executable: " <> (if executable p then "yes" else "no"),
+      "Is searchable: " <> (if searchable p then "yes" else "no")
+    ]
+
+displayTimes :: EntryInfo -> [String]
+displayTimes info = case entryTimes info of
+  Nothing -> [" ", "Last access and modification times unknown", "(could not read them)"]
+  Just (acTm, mdTm) -> [" ", "Last access time:" <> format acTm, "Last modification time:" <> format mdTm]
+    where format = formatTime defaultTimeLocale " %T %B %-d %Y"
 
 tellEntry :: Entry -> String
 tellEntry e = case e of

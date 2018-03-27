@@ -18,21 +18,21 @@ Clifm is a [brick](https://github.com/jtdaugherty/brick) application, that in tu
 
 If your terminal supports a mouse you can use it to change tab, click a button on the bottom or change your selection, but only using the keyboard you can perform every possible action. This is the list of all the keybindings:
 
-- Up/Down Arrow keys: move the selection in the current Tab
-- PageUp/PageDown keys: move the selection in the current Tab by one page at a time
-- Home/End keys: move the selection in the current Tab to beginning or end of list
+- Up/Down Arrow: move the selection in the current Tab
+- PageUp/PageDown: move the selection in the current Tab by one page at a time
+- Home/End: move the selection in the current Tab to beginning or end of list
 - Enter: Open the selected directory
 - Tab/BackTab: Move to the next/previous tab
-- Ctrl+Left/Right Arrow: Swap current tab's position with the previous/next one
-- Esc or Ctrl+q: **Q**uit
-- Ctrl+x: Cut the selected Item
-- Ctrl+c: Copy the selected Item
+- Ctrl+(Left/Right Arrow): Swap current tab's position with the previous/next one
+- Esc/Ctrl+q: **Q**uit
+- Ctrl+(x/c): Cut/Copy the selected Item
 - Ctrl+v: Paste in the current Tab's directory
 - Ctrl+r: **R**ename the selected Item
 - Ctrl+d: **D**elete the selected Item
 - Ctrl+a: M**a**ke a new directory
 - Ctrl+t: **T**ouch (create an empty) file
 - Ctrl+g: **G**o to another directory
+- Ctrl+s: **S**how info
 - Ctrl+n: Open a **N**ew Tab
 - Ctrl+o: **O**pen the selected directory in a New Tab
 - Ctrl+l: Re**l**oad the current Tab
@@ -92,6 +92,5 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 - more settings (using command line arguments)
 - mc directory comparison
 - multi-pane view
-- listing more properties
 - sorting based on file size or date
 - find a way to read correctly a directory size
