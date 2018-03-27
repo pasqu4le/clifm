@@ -156,12 +156,6 @@ handleTabEvent event (DirTab n p enList) = do
   newList <- handleListEvent event enList
   return $ DirTab n p newList
 
-openEntry :: Tab -> IO (Maybe Tab)
-openEntry (DirTab _ _ enList) = case listSelectedElement enList of
-  Just (_, (DirEntry _ path _)) -> Just <$> makeDirTab path
-  _ -> return Nothing
-openEntry _ = return Nothing
-
 reload :: Tab -> IO Tab
 reload tab = case tab of
   DirTab _ path _ -> makeDirTab path
@@ -184,3 +178,14 @@ selectedEntry (DirTab _ _ enList) = case listSelectedElement enList of
 
 toMaybe :: Either SomeException b -> Maybe b
 toMaybe = either (\_ -> Nothing) (Just)
+
+isExecutable :: Entry -> Bool
+isExecutable = hasPermission executable
+
+isReadable :: Entry -> Bool
+isReadable = hasPermission readable
+
+hasPermission :: (Permissions -> Bool) -> Entry -> Bool
+hasPermission prop en = case entryPerms $ entryInfo en of
+  Just perms -> prop perms
+  _ -> False

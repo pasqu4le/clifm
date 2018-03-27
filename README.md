@@ -3,7 +3,7 @@ Clifm is a small file manager written in Haskell with a command line interface. 
 
 [![asciicast](https://asciinema.org/a/LHfaWHtFKzp9KAYGEiGpns3mR.png)](https://asciinema.org/a/LHfaWHtFKzp9KAYGEiGpns3mR)
 
-Note: this is still an experiment and might be unstable. I do not recommend using it as your daily File Manager and I take no responsibility on what you do with it.
+> Note: this is still an experiment and might be unstable. I do not recommend using it as your daily File Manager and I take no responsibility on what you do with it.
 
 ## Building and Running
 To build clifm, you need [GHC](https://www.haskell.org/ghc/) and [cabal-install](http://hackage.haskell.org/package/cabal-install). Then you can build with:
@@ -21,7 +21,7 @@ If your terminal supports a mouse you can use it to change tab, click a button o
 - Up/Down Arrow: move the selection in the current Tab
 - PageUp/PageDown: move the selection in the current Tab by one page at a time
 - Home/End: move the selection in the current Tab to beginning or end of list
-- Enter: Open the selected directory
+- Enter: Open directory/run executable file/open readable file in editor
 - Tab/BackTab: Move to the next/previous tab
 - Ctrl+(Left/Right Arrow): Swap current tab's position with the previous/next one
 - Esc/Ctrl+q: **Q**uit
@@ -88,7 +88,6 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 
 ## TODOs
 - treaded IO operations (that do not freeze the UI and can be canceled)
-- support for external text editors
 - more settings (using command line arguments)
 - mc directory comparison
 - multi-pane view

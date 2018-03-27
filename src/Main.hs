@@ -14,7 +14,7 @@ import Graphics.Vty (mkVty, standardIOConfig, setMode, outputIface, Mode(Mouse))
 -- entry point: parses the arguments and starts the brick application
 
 -- options
-data FMOptions = FMOptions {dirPath :: FilePath, themeType :: ThemeType}
+data FMOptions = FMOptions {dirPath :: FilePath, editComm :: String, themeType :: ThemeType}
 data ThemeType = CustomTheme FilePath | DefaultTheme
 
 -- argument parsing functions
@@ -27,6 +27,12 @@ opts = FMOptions
     <> help "Directory to open"
     <> showDefault
     <> value ".")
+  <*> strOption
+    ( long "editor"
+    <> short 'e'
+    <> help "Editor command/path (file path will be appended to this)"
+    <> showDefault
+    <> value "nano")
   <*> (customTheme <|> defTheme)
 
 customTheme :: Parser ThemeType
@@ -51,7 +57,7 @@ main = runUI =<< execParser options
      <> progDesc "A simple CLI-based File Manager" )
 
 runUI :: FMOptions -> IO ()
-runUI (FMOptions dirPath selTheme) = do
+runUI (FMOptions dirPath editorCom selTheme) = do
   isDir <- doesDirectoryExist dirPath
   path <- if isDir then makeAbsolute dirPath else return []
   theme <- loadTheme selTheme
@@ -60,7 +66,7 @@ runUI (FMOptions dirPath selTheme) = do
         v <- mkVty =<< standardIOConfig
         setMode (outputIface v) Mouse True
         return v
-  state <- makeState path
+  state <- makeState path editorCom
   void $ customMain buildVty Nothing (app atrm) state
 
 app :: AttrMap -> App State e Name
