@@ -1,6 +1,5 @@
 module Widgets.Manager where
 import Types
-import ListZipper
 import Widgets.Tab
 import Widgets.Clipboard
 import Widgets.Prompt
@@ -14,16 +13,19 @@ import Brick.Types (Widget, BrickEvent(..), EventM, Next, ViewportType(..), Loca
 import Brick.Widgets.Border (border, hBorder)
 import Brick.Widgets.Border.Style (unicodeBold)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
+import Data.Foldable (toList)
+import Data.List.PointedList (PointedList, _focus, replace, delete, singleton, insert, insertLeft, moveTo, withFocus, atStart, atEnd)
+import Data.List.PointedList.Circular (next, previous)
 
 data State = State {tabZipper :: TabZipper, clipboard :: Clipboard, prompt :: Maybe Prompt, editorCommand :: String}
-type TabZipper = Zipper Tab
+type TabZipper = PointedList Tab
 
 -- creation functions
 makeState :: FilePath -> String -> IO State
 makeState path editCom = (\zp -> State zp EmptyBoard Nothing editCom) <$> makeTabZipper path
 
 makeTabZipper :: FilePath -> IO TabZipper
-makeTabZipper path = (\tab -> Zipper tab [] []) <$> makeDirTab path
+makeTabZipper path = singleton <$> makeDirTab path
 
 -- rendering functions
 drawUi :: State -> [Widget Name]
@@ -43,7 +45,7 @@ renderMainUI state = vBox [labels, topSep, content, botSep,  menu]
 
 renderLabels :: TabZipper -> Widget Name
 renderLabels zipper = hBox . map clickableLabel $ zip labels [0..]
-  where labels = mapWithCurrent renderLabel zipper
+  where labels = map renderLabel . toList $ withFocus zipper
 
 clickableLabel :: (Widget Name, Int) -> Widget Name
 clickableLabel (l, n) = clickable (LNum n) l
@@ -92,14 +94,14 @@ handleMain (VtyEvent ev) = case ev of
   EvKey (KChar 't') [MCtrl] -> openPrompt makeTouchPrompt
   EvKey (KChar 'g') [MCtrl] -> openPrompt makeGoToPrompt
   EvKey (KChar 's') [MCtrl] -> openPrompt makeDisplayInfoPrompt
-  EvKey (KChar 'n') [MCtrl] -> updateZipper (insertRightAndFocus makeEmptyTab)
+  EvKey (KChar 'n') [MCtrl] -> updateZipper (insert makeEmptyTab)
   EvKey (KChar 'o') [MCtrl] -> openTabDir True
   EvKey (KChar 'l') [MCtrl] -> updateZipperEv reloadCurrentTab
-  EvKey (KChar 'k') [MCtrl] -> updateZipper (remove makeEmptyTab)
-  EvKey (KChar '\t') [] -> updateZipper nextCiclical
-  EvKey KBackTab [] -> updateZipper prevCiclical
-  EvKey KLeft [MCtrl] -> updateZipper swapPrevCiclical
-  EvKey KRight [MCtrl] -> updateZipper swapNextCiclical
+  EvKey (KChar 'k') [MCtrl] -> updateZipper removeTab
+  EvKey (KChar '\t') [] -> updateZipper next
+  EvKey KBackTab [] -> updateZipper previous
+  EvKey KLeft [MCtrl] -> updateZipper swapWithPrevious
+  EvKey KRight [MCtrl] -> updateZipper swapWithNext
   EvKey KEnter [] -> openTabEntry
   _ -> updateZipperEv (updateCurrentTab ev)
 handleMain (MouseUp name _ (Location pos)) = case name of
@@ -160,7 +162,7 @@ openTabDir inNew = updateZipperEv (openSelectedDir inNew)
 
 openSelectedDir :: Bool -> Tab -> EventM Name (TabZipper -> TabZipper)
 openSelectedDir inNew tab = case selectedEntry tab of
-  Just (DirEntry {entryPath = path}) -> (if inNew then insertRight else replace) <$> (liftIO $ makeDirTab path)
+  Just (DirEntry {entryPath = path}) -> (if inNew then insertFixed else replace) <$> (liftIO $ makeDirTab path)
   _ -> return id
 
 reloadCurrentTab :: Tab -> EventM Name (TabZipper -> TabZipper)
@@ -172,3 +174,32 @@ updateCurrentTab ev tab = replace <$> handleTabEvent ev tab
 -- tab and tabZipper utility functions
 moveTabToRow :: Int -> TabZipper -> TabZipper
 moveTabToRow row zipper = replace (moveToRow row $ current zipper) zipper
+
+current :: TabZipper -> Tab
+current = _focus
+
+removeTab :: TabZipper -> TabZipper
+removeTab zipper = case delete zipper of
+  Just newZipper -> newZipper
+  _ -> singleton makeEmptyTab
+
+moveToNth :: Int -> TabZipper -> TabZipper
+moveToNth n zipper = case moveTo n zipper of
+  Just newZipper -> newZipper
+  _ -> zipper
+
+insertFixed :: Tab -> TabZipper -> TabZipper
+insertFixed tab = previous . insert tab
+
+swapWithPrevious :: TabZipper -> TabZipper
+swapWithPrevious zipper
+  | atStart zipper && atEnd zipper = zipper
+  | atStart zipper = insert (current zipper) . previous $ removeTab zipper
+  | atEnd zipper = insertLeft (current zipper) $ removeTab zipper
+  | otherwise = insertLeft (current zipper) . previous $ removeTab zipper
+
+swapWithNext :: TabZipper -> TabZipper
+swapWithNext zipper
+  | atStart zipper && atEnd zipper = zipper
+  | atEnd zipper = insertLeft (current zipper) . next $ removeTab zipper
+  | otherwise = insert (current zipper) $ removeTab zipper

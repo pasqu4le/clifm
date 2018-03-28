@@ -78,8 +78,8 @@ getEntryTimes path = do
   return (accessTime, modifTime)
 
 -- rendering functions
-renderLabel :: Bool -> Tab -> Widget Name
-renderLabel hasFoc tab = modifs . hLimit (wdt + 2) $ vBox [top, middle]
+renderLabel :: (Tab, Bool) -> Widget Name
+renderLabel (tab, hasFoc) = modifs . hLimit (wdt + 2) $ vBox [top, middle]
   where
     modifs = if hasFoc then withBorderStyle unicodeBold . visible
       else withBorderStyle unicodeRounded
