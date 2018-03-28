@@ -7,12 +7,12 @@ import Brick.Widgets.Core (str, hLimit)
 import Brick.Types (Widget)
 import Brick.Widgets.Border (borderWithLabel)
 
-data Clipboard = CopyBoard {copyFrom :: Entry} | CutBoard {cutFrom :: Entry} | EmptyBoard
+data Clipboard = CopyBoard {fromEntry :: Entry} | CutBoard {fromEntry :: Entry} | EmptyBoard
 
 instance Show Clipboard where
-  show (CopyBoard entry) = takeFileName $ entryPath entry
-  show (CutBoard entry) = takeFileName $ entryPath entry
-  show _ = " -empty- "
+  show EmptyBoard = " -empty- "
+  show board = takeFileName . entryPath $ fromEntry board
+
 
 -- creation functions
 makeCopyBoard :: Entry -> Clipboard

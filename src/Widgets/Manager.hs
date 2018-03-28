@@ -160,7 +160,7 @@ openTabDir inNew = updateZipperEv (openSelectedDir inNew)
 
 openSelectedDir :: Bool -> Tab -> EventM Name (TabZipper -> TabZipper)
 openSelectedDir inNew tab = case selectedEntry tab of
-  Just (DirEntry _ path _) -> (if inNew then insertRight else replace) <$> (liftIO $ makeDirTab path)
+  Just (DirEntry {entryPath = path}) -> (if inNew then insertRight else replace) <$> (liftIO $ makeDirTab path)
   _ -> return id
 
 reloadCurrentTab :: Tab -> EventM Name (TabZipper -> TabZipper)

@@ -57,16 +57,16 @@ main = runUI =<< execParser options
      <> progDesc "A simple CLI-based File Manager" )
 
 runUI :: FMOptions -> IO ()
-runUI (FMOptions dirPath editorCom selTheme) = do
-  isDir <- doesDirectoryExist dirPath
-  path <- if isDir then makeAbsolute dirPath else return []
-  theme <- loadTheme selTheme
+runUI options = do
+  isDir <- doesDirectoryExist $ dirPath options
+  path <- if isDir then makeAbsolute $ dirPath options else return []
+  theme <- loadTheme $ themeType options
   let atrm = themeToAttrMap theme
       buildVty = do
         v <- mkVty =<< standardIOConfig
         setMode (outputIface v) Mouse True
         return v
-  state <- makeState path editorCom
+  state <- makeState path $ editComm options
   void $ customMain buildVty Nothing (app atrm) state
 
 app :: AttrMap -> App State e Name

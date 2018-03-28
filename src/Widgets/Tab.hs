@@ -25,16 +25,16 @@ data EntryInfo = EntryInfo {entrySize :: Integer, entryPerms :: Maybe Permission
 
 instance Eq Tab where
   EmptyTab == EmptyTab = True
-  (DirTab _ p1 _) == (DirTab _ p2 _) = p1 == p2
+  (DirTab {tabPath = p1}) == (DirTab {tabPath = p2}) = p1 == p2
   _ == _ = False
 
 instance Show Tab where
   show EmptyTab = "-new tab-"
-  show (DirTab name _ _) = name
+  show (DirTab {tabName = name}) = name
 
 instance Show Entry where
-  show (DirEntry n _ _) = "+ " ++ n
-  show (FileEntry n _ _) = "- " ++ n
+  show (DirEntry {entryName = n}) = "+ " ++ n
+  show (FileEntry {entryName = n}) = "- " ++ n
 
 -- creation functions
 makeEmptyTab :: Tab
@@ -45,9 +45,9 @@ makeDirTab path = do
   isFile <- doesFileExist path
   isDir <- doesDirectoryExist path
   if isDir && not isFile then do
-    entryList <- makeEntryList path
+    entryLst <- makeEntryList path
     let fName = takeFileName path
-    return $ DirTab (if null fName then "-root-" else fName) path entryList
+    return $ DirTab (if null fName then "-root-" else fName) path entryLst
   else return makeEmptyTab
 
 makeEntryList :: FilePath -> IO (List Name Entry)
@@ -94,10 +94,10 @@ renderPathSeparator t = hBox [hBorder, renderPath t, borderElem bsHorizontal]
 renderPath :: Tab -> Widget Name
 renderPath tab = str $ case tab of
   EmptyTab -> " <empty tab> "
-  DirTab _ path _ -> " " ++ path ++ " "
+  DirTab {tabPath = path} -> " " ++ path ++ " "
 
 renderContent :: Tab -> Widget Name
-renderContent (DirTab _ _ enList) = renderList renderEntry True enList
+renderContent (DirTab {entryList = enList}) = renderList renderEntry True enList
 renderContent EmptyTab = vBox (lns ++ [fill ' '])
   where lns = map strWrap $ lines "Command Line Interface File Manager\n \n\
     \clifm allows you to explore directories on multiple tabs.\nIf your terminal\
@@ -152,27 +152,27 @@ tabButtons _ = []
 -- event handling and state-changing functions
 handleTabEvent :: Event -> Tab -> EventM Name Tab
 handleTabEvent _ EmptyTab = return EmptyTab
-handleTabEvent event (DirTab n p enList) = do
-  newList <- handleListEvent event enList
-  return $ DirTab n p newList
+handleTabEvent event dirTab = do
+  newList <- handleListEvent event $ entryList dirTab
+  return $ dirTab {entryList = newList}
 
 reload :: Tab -> IO Tab
 reload tab = case tab of
-  DirTab _ path _ -> makeDirTab path
+  DirTab {tabPath = path} -> makeDirTab path
   EmptyTab -> return EmptyTab
 
 moveToRow :: Int -> Tab -> Tab
 moveToRow _ EmptyTab = EmptyTab
-moveToRow row (DirTab n p l) = DirTab n p $ listMoveTo row l
+moveToRow row dirTab = dirTab {entryList = (listMoveTo row $ entryList dirTab)}
 
 -- utility functions
 maybeTabPath :: Tab -> Maybe FilePath
 maybeTabPath EmptyTab = Nothing
-maybeTabPath (DirTab _ path _) = Just path
+maybeTabPath (DirTab {tabPath = path}) = Just path
 
 selectedEntry :: Tab -> Maybe Entry
 selectedEntry EmptyTab = Nothing
-selectedEntry (DirTab _ _ enList) = case listSelectedElement enList of
+selectedEntry (DirTab {entryList = enList}) = case listSelectedElement enList of
   Just (_, entry) -> Just entry
   _ -> Nothing
 
