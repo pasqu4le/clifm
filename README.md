@@ -1,7 +1,7 @@
 # Command Line Interface File Manager
 Clifm is a small file manager written in Haskell with a command line interface. It allows you to explore directories in multiple tabs and perform basic operations.
 
-[![asciicast](https://asciinema.org/a/LHfaWHtFKzp9KAYGEiGpns3mR.png)](https://asciinema.org/a/LHfaWHtFKzp9KAYGEiGpns3mR)
+[![asciicast](https://asciinema.org/a/nyNMHnxMbOCu6NnrKHt8jvbL9.png)](https://asciinema.org/a/nyNMHnxMbOCu6NnrKHt8jvbL9)
 
 > Note: this is still an experiment and might be unstable. I do not recommend using it as your daily File Manager and I take no responsibility on what you do with it.
 
@@ -24,21 +24,21 @@ If your terminal supports a mouse you can use it to change tab, click a button o
 - Enter: Open directory/run executable file/open readable file in editor
 - Tab/BackTab: Move to the next/previous tab
 - Ctrl+(Left/Right Arrow): Swap current tab's position with the previous/next one
-- Esc/Ctrl+q: **Q**uit
-- Ctrl+(x/c): Cut/Copy the selected Item
-- Ctrl+v: Paste in the current Tab's directory
-- Ctrl+r: **R**ename the selected Item
-- Ctrl+d: **D**elete the selected Item
-- Ctrl+a: M**a**ke a new directory
-- Ctrl+t: **T**ouch (create an empty) file
-- Ctrl+g: **G**o to another directory
-- Ctrl+s: **S**how info
-- Ctrl+n: Open a **N**ew Tab
-- Ctrl+o: **O**pen the selected directory in a New Tab
-- Ctrl+l: Re**l**oad the current Tab
-- Ctrl+k: **K**ill (close) the current Tab
-- Ctrl+b: Order **b**y file name/file size/access time/modification time
-- I: Invert order
+- Esc/Q: **Q**uit
+- Ctrl+(X/C): Cut/Copy the selected Item
+- Ctrl+V: Paste in the current Tab's directory
+- Ctrl+R: **R**ename the selected Item
+- Ctrl+D: **D**elete the selected Item
+- Ctrl+O: **O**pen the selected directory in a New Tab
+- K: **K**ill (close) the current Tab
+- S: **S**how info about the selected Item
+- M: **M**ake a new directory
+- T: **T**ouch (create an empty) file
+- G: **G**o to another directory
+- E: Open **E**mpty Tab
+- R: **R**efresh the current Tab
+- O: **O**rder by file name/file size/access time/modification time
+- I: **I**nvert order
 
 The actions above will not work only if a prompt is up, or you try to do something not possible.
 

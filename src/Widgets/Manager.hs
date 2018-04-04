@@ -7,10 +7,11 @@ import Widgets.Prompt
 import Control.Monad.IO.Class (liftIO)
 import System.Process (callCommand)
 import Control.Exception (try, SomeException)
+import Data.Char (toUpper)
 import Brick.Main (continue, halt, suspendAndResume)
-import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, viewport, withBorderStyle, withDefAttr, clickable)
+import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, viewport, withBorderStyle, clickable)
 import Brick.Types (Widget, BrickEvent(..), EventM, Next, ViewportType(..), Location(..))
-import Brick.Widgets.Border (border, hBorder)
+import Brick.Widgets.Border (border, hBorder, borderWithLabel)
 import Brick.Widgets.Border.Style (unicodeBold)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 import Data.Foldable (toList)
@@ -56,15 +57,16 @@ renderMenu st = hBox . (renderClipboard (clipboard st) :) . renderButtons . curr
 renderButtons :: Tab -> [Widget Name]
 renderButtons tab = map renderButton $ tabButtons tab ++ indipendentButtons
 
-renderButton :: (Widget Name, Char) -> Widget Name
-renderButton (s, c) = clickable (BVal c) $ border s
+renderButton :: (Widget Name, Char, Bool) -> Widget Name
+renderButton (s, c, b) = clickable (BVal c b) $ btBr s
+  where btBr = if b then borderWithLabel (str $ "C-" ++ [toUpper c]) else border
 
-indipendentButtons :: [(Widget Name, Char)]
+indipendentButtons :: [(Widget Name, Char, Bool)]
 indipendentButtons = [
-    (withDefAttr keybindAttr (str "n") <+> str "ew tab", 'n'),
-    (withDefAttr keybindAttr (str "g") <+> str "o to", 'g'),
-    (withDefAttr keybindAttr (str "k") <+> str "ill tab", 'k'),
-    (withDefAttr keybindAttr (str "q") <+> str "uit", 'q')
+    (keybindStr "e" <+> str "mpty tab", 'e', False),
+    (keybindStr "g" <+> str "o to", 'g', False),
+    (keybindStr "k" <+> str "ill tab", 'k', False),
+    (keybindStr "q" <+> str "uit", 'q', False)
   ]
 
 -- event handling functions
@@ -84,20 +86,20 @@ handlePrompt _ _ state = continue state
 handleMain :: BrickEvent Name e -> State -> EventM Name (Next State)
 handleMain (VtyEvent ev) = case ev of
   EvKey KEsc [] -> halt
-  EvKey (KChar 'q') [MCtrl] -> halt
+  EvKey (KChar 'q') [] -> halt
   EvKey (KChar 'x') [MCtrl] -> updateClipboard makeCutBoard
   EvKey (KChar 'c') [MCtrl] -> updateClipboard makeCopyBoard
   EvKey (KChar 'v') [MCtrl] -> openPromptWithClip makePastePrompt
   EvKey (KChar 'r') [MCtrl] -> openPrompt makeRenamePrompt
   EvKey (KChar 'd') [MCtrl] -> openPrompt makeDeletePrompt
-  EvKey (KChar 'a') [MCtrl] -> openPrompt makeMkdirPrompt
-  EvKey (KChar 't') [MCtrl] -> openPrompt makeTouchPrompt
-  EvKey (KChar 'g') [MCtrl] -> openPrompt makeGoToPrompt
-  EvKey (KChar 's') [MCtrl] -> openPrompt makeDisplayInfoPrompt
-  EvKey (KChar 'n') [MCtrl] -> updateZipper (insert makeEmptyTab)
   EvKey (KChar 'o') [MCtrl] -> openTabDir True
-  EvKey (KChar 'l') [MCtrl] -> updateZipperEv reloadCurrentTab
-  EvKey (KChar 'k') [MCtrl] -> updateZipper removeTab
+  EvKey (KChar 'k') [] -> updateZipper removeTab
+  EvKey (KChar 's') [] -> openPrompt makeDisplayInfoPrompt
+  EvKey (KChar 'm') [] -> openPrompt makeMkdirPrompt
+  EvKey (KChar 't') [] -> openPrompt makeTouchPrompt
+  EvKey (KChar 'g') [] -> openPrompt makeGoToPrompt
+  EvKey (KChar 'e') [] -> updateZipper (insert makeEmptyTab)
+  EvKey (KChar 'r') [] -> updateZipperEv reloadCurrentTab
   EvKey (KChar '\t') [] -> updateZipper next
   EvKey KBackTab [] -> updateZipper previous
   EvKey KLeft [MCtrl] -> updateZipper swapWithPrevious
@@ -107,7 +109,7 @@ handleMain (VtyEvent ev) = case ev of
 handleMain (MouseUp name _ (Location pos)) = case name of
   EList -> updateZipper (moveTabToRow $ snd pos)
   (LNum n) -> updateZipper (moveToNth n)
-  (BVal c) -> handleMain (VtyEvent (EvKey (KChar c) [MCtrl]))
+  (BVal c b) -> handleMain . VtyEvent $ EvKey (KChar c) (if b then [MCtrl] else [])
   _ -> continue
 handleMain _ = continue
 

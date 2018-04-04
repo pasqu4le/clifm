@@ -13,7 +13,7 @@ import System.FilePath (takeFileName, takeDirectory, (</>))
 import System.Directory (Permissions, getPermissions, readable, writable, executable, searchable,
   getAccessTime, getModificationTime, doesDirectoryExist, doesFileExist, getFileSize, listDirectory)
 import Brick.Types (Widget, EventM)
-import Brick.Widgets.Core (hLimit, vLimit, hBox, vBox, (<+>), str, strWrap, fill, withBorderStyle, withDefAttr, visible)
+import Brick.Widgets.Core (hLimit, vLimit, hBox, vBox, (<+>), str, strWrap, fill, withBorderStyle, visible)
 import Brick.Widgets.List (List, list, renderList, handleListEvent, listMoveTo,
   listSelectedElement, listInsert, listRemove, listReverse, listReplace)
 import Brick.Widgets.Border (hBorder, vBorder, borderElem, border)
@@ -45,10 +45,10 @@ instance Show EntryOrder where
   show order = show (orderType order) ++ (if inverted order then " \x2193 " else " \x2191 ")
 
 instance Show OrderType where
-  show FileName = "file name"
-  show FileSize = "file size"
-  show AccessTime = "access time"
-  show ModificationTime = "modification time"
+  show FileName = "name"
+  show FileSize = "size"
+  show AccessTime = "access"
+  show ModificationTime = "modified"
 
 -- creation functions
 makeEmptyTab :: Tab
@@ -133,7 +133,7 @@ renderContent EmptyTab = vBox (lns ++ [fill ' '])
     \directory.\n \nYou can move to a different tab using... the Tab and the \
     \BackTab key or use Ctrl + Left or Right arrow key to swap them.\n \nYou can \
     \see every other possible action as a button in the bottom, or you can use \
-    \them as Ctrl+Key combination.\n \nTo see them all please refer to the README"
+    \them as Keys combination.\n \nTo see them all please refer to the README"
 
 renderEntry :: Bool -> Entry -> Widget Name
 renderEntry _ en = let info = entryInfo en in vLimit 1 $ hBox [
@@ -159,18 +159,20 @@ renderEntryTime Nothing _ = str " -----------------"
 renderEntryTime (Just tms) sel = str . format $ (if sel then fst else snd) tms
   where format = formatTime defaultTimeLocale " %R %b %e %Y"
 
-tabButtons :: Tab -> [(Widget Name, Char)]
-tabButtons DirTab {} = [
-    (str "cut", 'x'),
-    (str "copy", 'c'),
-    (str "paste", 'v'),
-    (withDefAttr keybindAttr (str "r") <+> str "ename", 'r'),
-    (withDefAttr keybindAttr (str "d") <+> str "elete", 'd'),
-    (str "m" <+> withDefAttr keybindAttr (str "a") <+> str "ke dir", 'm'),
-    (withDefAttr keybindAttr (str "t") <+> str "ouch file", 't'),
-    (withDefAttr keybindAttr (str "s") <+> str "how info", 's'),
-    (str "re" <+> withDefAttr keybindAttr (str "l") <+> str "oad", 'l'),
-    (withDefAttr keybindAttr (str "o") <+> str "pen in new tab", 'o')
+tabButtons :: Tab -> [(Widget Name, Char, Bool)]
+tabButtons DirTab {entryOrder = order} = [
+    (str "cut", 'x', True),
+    (str "copy", 'c', True),
+    (str "paste", 'v', True),
+    (keybindStr "r" <+> str "ename", 'r', True),
+    (keybindStr "d" <+> str "elete", 'd', True),
+    (keybindStr "m" <+> str "ake dir", 'm', False),
+    (keybindStr "t" <+> str "ouch file", 't', False),
+    (keybindStr "s" <+> str "how info", 's', False),
+    (keybindStr "r" <+> str "efresh", 'r', False),
+    (keybindStr "o" <+> str "pen in new tab", 'o', True),
+    (keybindStr "o" <+> str ("rder by " ++ (show . nextOrderType $ orderType order)), 'o', False),
+    (keybindStr "i" <+> str "nvert order", 'i', False)
   ]
 tabButtons _ = []
 
@@ -178,7 +180,7 @@ tabButtons _ = []
 handleTabEvent :: Event -> Tab -> EventM Name Tab
 handleTabEvent _ EmptyTab = return EmptyTab
 handleTabEvent event tab = case event of
-  EvKey (KChar 'b') [MCtrl] -> return $ changeOrder tab
+  EvKey (KChar 'o') [] -> return $ changeOrder tab
   EvKey (KChar 'i') [] -> return $ invertOrder tab
   _ -> do
     newList <- handleListEvent event $ entryList tab

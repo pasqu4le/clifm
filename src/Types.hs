@@ -1,6 +1,8 @@
 module Types where
 
 import Data.Monoid ((<>))
+import Brick.Widgets.Core (withDefAttr, str)
+import Brick.Types (Widget)
 import Brick.Themes (Theme, newTheme)
 import Brick.AttrMap (AttrName, AttrMap, attrName, attrMap)
 import Graphics.Vty (defAttr, withStyle, underline, black, yellow, white, blue, red)
@@ -9,7 +11,7 @@ import Brick.Widgets.Edit (editFocusedAttr)
 import Brick.Widgets.List (listSelectedFocusedAttr)
 
 -- names
-data Name = BVal Char | LScroll | LNum Int | PEdit | EList deriving (Ord, Show, Eq)
+data Name = BVal Char Bool | LScroll | LNum Int | PEdit | EList deriving (Ord, Show, Eq)
 
 -- attributes and themes
 defaultTheme :: Theme
@@ -33,3 +35,7 @@ errorAttr = attrName "error"
 
 disclaimerAttr :: AttrName
 disclaimerAttr = attrName "disclaimer"
+
+-- utility functions
+keybindStr :: String -> Widget Name
+keybindStr = withDefAttr keybindAttr . str
