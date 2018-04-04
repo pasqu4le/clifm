@@ -37,6 +37,8 @@ If your terminal supports a mouse you can use it to change tab, click a button o
 - Ctrl+o: **O**pen the selected directory in a New Tab
 - Ctrl+l: Re**l**oad the current Tab
 - Ctrl+k: **K**ill (close) the current Tab
+- Ctrl+b: Order **b**y file name/file size/access time/modification time
+- I: Invert order
 
 The actions above will not work only if a prompt is up, or you try to do something not possible.
 
@@ -91,5 +93,5 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 - more settings (using command line arguments)
 - mc directory comparison
 - multi-pane view
-- sorting based on file size or date
+- searching
 - find a way to read correctly a directory size

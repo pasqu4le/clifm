@@ -5,7 +5,8 @@ import Data.List (sortOn)
 import Data.Char (toLower)
 import Data.Vector (fromList)
 import Data.Maybe (fromMaybe)
-import Data.Time.Clock (UTCTime)
+import Data.Time.Clock (UTCTime(..), secondsToDiffTime)
+import Data.Time.Calendar (Day(ModifiedJulianDay))
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Control.Exception (try, SomeException)
 import System.FilePath (takeFileName, takeDirectory, (</>))
@@ -13,15 +14,19 @@ import System.Directory (Permissions, getPermissions, readable, writable, execut
   getAccessTime, getModificationTime, doesDirectoryExist, doesFileExist, getFileSize, listDirectory)
 import Brick.Types (Widget, EventM)
 import Brick.Widgets.Core (hLimit, vLimit, hBox, vBox, (<+>), str, strWrap, fill, withBorderStyle, withDefAttr, visible)
-import Brick.Widgets.List (List, list, renderList, handleListEvent, listMoveTo, listSelectedElement)
+import Brick.Widgets.List (List, list, renderList, handleListEvent, listMoveTo,
+  listSelectedElement, listInsert, listRemove, listReverse, listReplace)
 import Brick.Widgets.Border (hBorder, vBorder, borderElem, border)
 import Brick.Widgets.Border.Style (unicodeRounded, unicodeBold, bsHorizontal, bsCornerTL, bsCornerTR)
-import Graphics.Vty (Event)
+import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
+import Data.Foldable (toList)
 
-data Tab = DirTab {tabName :: String, tabPath :: FilePath, entryList :: List Name Entry} | EmptyTab
+data Tab = DirTab {tabName :: String, tabPath :: FilePath, entryList :: List Name Entry, entryOrder :: EntryOrder} | EmptyTab
 data Entry = DirEntry {entryName :: String, entryPath :: FilePath, entryInfo :: EntryInfo} |
   FileEntry {entryName :: String, entryPath :: FilePath, entryInfo :: EntryInfo}
 data EntryInfo = EntryInfo {entrySize :: Integer, entryPerms :: Maybe Permissions, entryTimes :: Maybe (UTCTime, UTCTime)} deriving Show
+data EntryOrder = EntryOrder {orderType :: OrderType, inverted :: Bool}
+data OrderType = FileName | FileSize | AccessTime | ModificationTime deriving (Eq, Enum, Bounded)
 
 instance Eq Tab where
   EmptyTab == EmptyTab = True
@@ -36,6 +41,15 @@ instance Show Entry where
   show (DirEntry {entryName = n}) = "+ " ++ n
   show (FileEntry {entryName = n}) = "- " ++ n
 
+instance Show EntryOrder where
+  show order = show (orderType order) ++ (if inverted order then " \x2193 " else " \x2191 ")
+
+instance Show OrderType where
+  show FileName = "file name"
+  show FileSize = "file size"
+  show AccessTime = "access time"
+  show ModificationTime = "modification time"
+
 -- creation functions
 makeEmptyTab :: Tab
 makeEmptyTab = EmptyTab
@@ -45,18 +59,19 @@ makeDirTab path = do
   isFile <- doesFileExist path
   isDir <- doesDirectoryExist path
   if isDir && not isFile then do
-    entryLst <- makeEntryList path
     let fName = takeFileName path
-    return $ DirTab (if null fName then "-root-" else fName) path entryLst
+        order = EntryOrder FileName False
+    entryLst <- makeEntryList order path
+    return $ DirTab (if null fName then "-root-" else fName) path entryLst order
   else return makeEmptyTab
 
-makeEntryList :: FilePath -> IO (List Name Entry)
-makeEntryList dir = do
+makeEntryList :: EntryOrder -> FilePath -> IO (List Name Entry)
+makeEntryList order dir = do
   sub <- listDirectory dir
   entries <- mapM (makeEntry . (dir </>)) sub
   let upPath = takeDirectory dir
   upDir <- DirEntry ".." upPath <$> makeEntryInfo upPath
-  return $ list EList (fromList . (upDir :) $ sortOn (map toLower . entryName) entries) 1
+  return $ list EList (fromList . (upDir :) $ sortEntries order entries) 1
 
 makeEntry :: FilePath -> IO Entry
 makeEntry path = do
@@ -89,7 +104,17 @@ renderLabel (tab, hasFoc) = modifs . hLimit (wdt + 2) $ vBox [top, middle]
     middle = hBox [vBorder, str $ take wdt txt, fill ' ', vBorder]
 
 renderPathSeparator :: Tab -> Widget Name
-renderPathSeparator t = hBox [hBorder, renderPath t, borderElem bsHorizontal]
+renderPathSeparator t = hBox [
+  borderElem bsHorizontal,
+  renderPath t,
+  hBorder,
+  renderEntryOrder t,
+  borderElem bsHorizontal]
+
+renderEntryOrder :: Tab -> Widget Name
+renderEntryOrder tab = str $ case tab of
+  DirTab {entryOrder = order} -> " by " ++ show order
+  _ -> ""
 
 renderPath :: Tab -> Widget Name
 renderPath tab = str $ case tab of
@@ -152,14 +177,40 @@ tabButtons _ = []
 -- event handling and state-changing functions
 handleTabEvent :: Event -> Tab -> EventM Name Tab
 handleTabEvent _ EmptyTab = return EmptyTab
-handleTabEvent event dirTab = do
-  newList <- handleListEvent event $ entryList dirTab
-  return $ dirTab {entryList = newList}
+handleTabEvent event tab = case event of
+  EvKey (KChar 'b') [MCtrl] -> return $ changeOrder tab
+  EvKey (KChar 'i') [] -> return $ invertOrder tab
+  _ -> do
+    newList <- handleListEvent event $ entryList tab
+    return $ tab {entryList = newList}
+
+changeOrder :: Tab -> Tab
+changeOrder EmptyTab = EmptyTab
+changeOrder tab = tab {entryOrder = newOrder,  entryList = newEntryList}
+  where
+    order = entryOrder tab
+    newOrder = order {orderType = nextOrderType $ orderType order}
+    eLst = entryList tab
+    (upDir:entries) = toList eLst
+    sorted = upDir : sortEntries newOrder entries
+    newEntryList = listReplace (fromList sorted) (Just 0) eLst
+
+invertOrder :: Tab -> Tab
+invertOrder EmptyTab = EmptyTab
+invertOrder tab = tab {entryOrder = newOrder, entryList = newEntryList}
+  where
+    order = entryOrder tab
+    newOrder = order {inverted = not $ inverted order}
+    eLst = entryList tab
+    upDir = head $ toList eLst
+    newEntryList = listInsert 0 upDir . listReverse $ listRemove 0 eLst
 
 reload :: Tab -> IO Tab
 reload tab = case tab of
-  DirTab {tabPath = path} -> makeDirTab path
   EmptyTab -> return EmptyTab
+  tab -> do
+    reloadedList <- makeEntryList (entryOrder tab) (tabPath tab)
+    return tab {entryList = reloadedList}
 
 moveToRow :: Int -> Tab -> Tab
 moveToRow _ EmptyTab = EmptyTab
@@ -189,3 +240,18 @@ hasPermission :: (Permissions -> Bool) -> Entry -> Bool
 hasPermission prop en = case entryPerms $ entryInfo en of
   Just perms -> prop perms
   _ -> False
+
+nextOrderType :: OrderType -> OrderType
+nextOrderType order
+  | order == (maxBound :: OrderType) = minBound
+  | otherwise = succ order
+
+sortEntries :: EntryOrder -> [Entry] -> [Entry]
+sortEntries order = (if inverted order then reverse else id) . case orderType order of
+  FileName -> sortOn (map toLower . entryName)
+  FileSize -> sortOn (entrySize . entryInfo)
+  AccessTime -> sortOn (fst . fromMaybe (zeroTime, zeroTime) . entryTimes . entryInfo)
+  ModificationTime -> sortOn (snd . fromMaybe (zeroTime, zeroTime) . entryTimes . entryInfo)
+
+zeroTime :: UTCTime
+zeroTime = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
