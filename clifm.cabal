@@ -10,7 +10,7 @@ name:                clifm
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.2.1.1
+version:             0.2.1.2
 
 -- A short (one-line) description of the package.
 synopsis:            Command Line Interface File Manager
@@ -74,7 +74,8 @@ executable clifm
                        vector >= 0.12 && <0.13,
                        time >=1.8 && <1.10,
                        process >=1.6 && <1.7,
-                       pointedlist >= 0.6 && <0.7
+                       pointedlist >= 0.6 && <0.7,
+                       byteunits >= 0.4 && <0.5
 
   -- Directories containing source files.
   hs-source-dirs:      src

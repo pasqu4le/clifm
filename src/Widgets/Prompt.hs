@@ -107,7 +107,7 @@ renderBody pr = vBox $ case action pr of
   DisplayError msg -> [str "Whoops, this went wrong:", withDefAttr errorAttr $ strWrap msg]
 
 displaySize :: EntryInfo -> String
-displaySize info = "Size: " ++ show (entrySize info) ++ " Bytes"
+displaySize info = "Size: " ++ show (entrySize info) ++ " Bytes (" ++ shortEntrySize info ++ ")"
 
 displayPerms :: EntryInfo -> [String]
 displayPerms info = case entryPerms info of

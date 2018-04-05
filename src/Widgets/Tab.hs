@@ -20,6 +20,7 @@ import Brick.Widgets.Border (hBorder, vBorder, borderElem, border)
 import Brick.Widgets.Border.Style (unicodeRounded, unicodeBold, bsHorizontal, bsCornerTL, bsCornerTR)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 import Data.Foldable (toList)
+import Data.ByteUnits (ByteValue(..), ByteUnit(Bytes), getShortHand, getAppropriateUnits)
 
 data Tab = DirTab {tabName :: String, tabPath :: FilePath, entryList :: List Name Entry, entryOrder :: EntryOrder} |
   SearchTab {tabName :: String, tabPath :: FilePath, tabQuery :: String, entryList :: List Name Entry, entryOrder :: EntryOrder} |
@@ -155,7 +156,7 @@ renderEntry :: Bool -> Entry -> Widget Name
 renderEntry _ en = let info = entryInfo en in vLimit 1 $ hBox [
     str $ show en,
     fill ' ',
-    str (" " ++ show (entrySize info) ++ " B"),
+    str $ shortEntrySize info,
     renderEntryPerms $ entryPerms info,
     renderEntryTime (entryTimes info) False
   ]
@@ -302,3 +303,7 @@ listRecursive (path:paths) = do
     let subPaths = map (path </>) subNames
     (path :) <$> listRecursive (subPaths ++ paths)
   else listRecursive paths
+
+shortEntrySize :: EntryInfo -> String
+shortEntrySize info = getShortHand . getAppropriateUnits $ ByteValue size Bytes
+  where size = fromInteger $ entrySize info
