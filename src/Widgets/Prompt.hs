@@ -163,7 +163,7 @@ handlePromptEvent :: Event -> Prompt -> EventM Name (Either Prompt Tab)
 handlePromptEvent ev pr = case ev of
   EvKey KEsc [] -> return . Right $ originTab pr
   EvKey KEnter [] -> liftIO $ tryProcessAction pr
-  _ -> (Left . Prompt (originTab pr)) <$> handleActionEditor ev (action pr)
+  _ -> Left . Prompt (originTab pr) <$> handleActionEditor ev (action pr)
 
 tryProcessAction :: Prompt -> IO (Either Prompt Tab)
 tryProcessAction pr = do
@@ -173,15 +173,15 @@ tryProcessAction pr = do
     Right tabRes -> Right tabRes
 
 processAction :: Prompt -> IO Tab
-processAction (Prompt {originTab = tab, action = act}) = case act of
-  Copy (FileEntry {entryPath = ePath}) path -> copyFileWithMetadata ePath (path </> takeFileName ePath) *> reload tab
-  Copy (DirEntry {entryPath = ePath}) path -> copyDirectoryRecursive ePath (path </> takeFileName ePath) *> reload tab
-  Cut (FileEntry {entryPath = ePath}) path -> moveFileWithMetadata ePath (path </> takeFileName ePath) *> reload tab
-  Cut (DirEntry {entryPath = ePath}) path -> moveDirectoryRecursive ePath (path </> takeFileName ePath) *> reload tab
-  Rename edit (FileEntry {entryPath = ePath}) -> renameFile ePath (takeDirectory ePath </> getEditLine edit) *> reload tab
-  Rename edit (DirEntry {entryPath = ePath}) -> moveDirectoryRecursive ePath (takeDirectory ePath </> getEditLine edit) *> reload tab
-  Delete (FileEntry {entryPath = ePath}) -> removeFile ePath *> reload tab
-  Delete (DirEntry {entryPath = ePath}) -> removeDirectoryRecursive ePath *> reload tab
+processAction Prompt {originTab = tab, action = act} = case act of
+  Copy FileEntry {entryPath = ePath} path -> copyFileWithMetadata ePath (path </> takeFileName ePath) *> reload tab
+  Copy DirEntry {entryPath = ePath} path -> copyDirectoryRecursive ePath (path </> takeFileName ePath) *> reload tab
+  Cut FileEntry {entryPath = ePath} path -> moveFileWithMetadata ePath (path </> takeFileName ePath) *> reload tab
+  Cut DirEntry {entryPath = ePath} path -> moveDirectoryRecursive ePath (path </> takeFileName ePath) *> reload tab
+  Rename edit FileEntry {entryPath = ePath} -> renameFile ePath (takeDirectory ePath </> getEditLine edit) *> reload tab
+  Rename edit DirEntry {entryPath = ePath} -> moveDirectoryRecursive ePath (takeDirectory ePath </> getEditLine edit) *> reload tab
+  Delete FileEntry {entryPath = ePath} -> removeFile ePath *> reload tab
+  Delete DirEntry {entryPath = ePath} -> removeDirectoryRecursive ePath *> reload tab
   Mkdir edit path -> createDirectory (path </> getEditLine edit) *> reload tab
   Touch edit path -> writeFile (path </> getEditLine edit) "" *> reload tab
   GoTo edit -> processGoTo $ getEditLine edit

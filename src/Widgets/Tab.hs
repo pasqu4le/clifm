@@ -36,8 +36,8 @@ instance Show Tab where
   show SearchTab {tabName = name} = "\x26B2 " ++ name
 
 instance Show Entry where
-  show (DirEntry {entryName = n}) = "+ " ++ n
-  show (FileEntry {entryName = n}) = "- " ++ n
+  show DirEntry {entryName = n} = "+ " ++ n
+  show FileEntry {entryName = n} = "- " ++ n
 
 instance Show EntryOrder where
   show order = show (orderType order) ++ (if inverted order then " \x2193 " else " \x2191 ")
@@ -97,8 +97,8 @@ makeEntry path = do
 makeEntryInfo :: FilePath -> IO EntryInfo
 makeEntryInfo path = do
   size <- getFileSize path
-  perms <- toMaybe <$> (try $ getPermissions path)
-  times <- toMaybe <$> (try $ getEntryTimes path)
+  perms <- toMaybe <$> try (getPermissions path)
+  times <- toMaybe <$> try (getEntryTimes path)
   return $ EntryInfo size perms times
 
 getEntryTimes :: FilePath -> IO (UTCTime, UTCTime)
@@ -129,7 +129,7 @@ renderPathSeparator t = hBox [
 renderEntryOrder :: Tab -> Widget Name
 renderEntryOrder tab = str $ case tab of
   EmptyTab -> ""
-  _ -> " by " ++ (show $ entryOrder tab)
+  _ -> " by " ++ show (entryOrder tab)
 
 renderPath :: Tab -> Widget Name
 renderPath tab = str $ case tab of
@@ -164,10 +164,10 @@ renderEntryPerms :: Maybe Permissions -> Widget Name
 renderEntryPerms Nothing = str " ----"
 renderEntryPerms (Just p) = str [
     ' ',
-    (if readable p then 'r' else '-'),
-    (if writable p then 'w' else '-'),
-    (if executable p then 'x' else '-'),
-    (if searchable p then 's' else '-')
+    if readable p then 'r' else '-',
+    if writable p then 'w' else '-',
+    if executable p then 'x' else '-',
+    if searchable p then 's' else '-'
   ]
 
 renderEntryTime :: Maybe (UTCTime, UTCTime) -> Bool -> Widget Name
@@ -247,7 +247,7 @@ reload tab = case tab of
 
 moveToRow :: Int -> Tab -> Tab
 moveToRow _ EmptyTab = EmptyTab
-moveToRow row tab = tab {entryList = (listMoveTo row $ entryList tab)}
+moveToRow row tab = tab {entryList = listMoveTo row $ entryList tab}
 
 -- utility functions
 selectedEntry :: Tab -> Maybe Entry
@@ -257,7 +257,7 @@ selectedEntry tab = case listSelectedElement $ entryList tab of
   _ -> Nothing
 
 toMaybe :: Either SomeException b -> Maybe b
-toMaybe = either (\_ -> Nothing) (Just)
+toMaybe = either (const Nothing) Just
 
 isExecutable :: Entry -> Bool
 isExecutable = hasPermission executable

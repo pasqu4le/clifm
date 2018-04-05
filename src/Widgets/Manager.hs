@@ -110,27 +110,27 @@ handleMain (VtyEvent ev) = case ev of
 handleMain (MouseUp name _ (Location pos)) = case name of
   EList -> updateZipper (moveTabToRow $ snd pos)
   (LNum n) -> updateZipper (moveToNth n)
-  (BVal c b) -> handleMain . VtyEvent $ EvKey (KChar c) (if b then [MCtrl] else [])
+  (BVal c b) -> handleMain . VtyEvent $ EvKey (KChar c) [MCtrl | b]
   _ -> continue
 handleMain _ = continue
 
 -- state-changing functions
 updateZipper :: (TabZipper -> TabZipper) -> State -> EventM Name (Next State)
-updateZipper f st = continue $ st {tabZipper=(f $ tabZipper st), prompt=Nothing}
+updateZipper f st = continue $ st {tabZipper=f $ tabZipper st, prompt=Nothing}
 
 updateClipboard :: (Entry -> Clipboard) -> State -> EventM Name (Next State)
 updateClipboard f st = continue $ case selectedEntry . current $ tabZipper st of
-  (Just entry) -> st {clipboard=(f entry), prompt=Nothing}
+  (Just entry) -> st {clipboard=f entry, prompt=Nothing}
   _ -> st {prompt=Nothing}
 
 updatePrompt :: Prompt -> State -> EventM Name (Next State)
-updatePrompt pr st = continue $ st {prompt=(Just pr)}
+updatePrompt pr st = continue $ st {prompt=Just pr}
 
 openPrompt :: (Tab -> Prompt) -> State -> EventM Name (Next State)
-openPrompt f st = continue $ st {prompt=(Just . f . current $ tabZipper st)}
+openPrompt f st = continue $ st {prompt=Just . f . current $ tabZipper st}
 
 openPromptWithClip :: (Clipboard -> Tab -> Prompt) -> State -> EventM Name (Next State)
-openPromptWithClip f st = continue $ st {prompt=(Just . f (clipboard st) . current $ tabZipper st)}
+openPromptWithClip f st = continue $ st {prompt=Just . f (clipboard st) . current $ tabZipper st}
 
 updateZipperEv :: (Tab -> EventM Name (TabZipper -> TabZipper)) -> State -> EventM Name (Next State)
 updateZipperEv inputFunc s = do
@@ -139,7 +139,7 @@ updateZipperEv inputFunc s = do
 
 openTabEntry :: State -> EventM Name (Next State)
 openTabEntry s = case selectedEntry . current $ tabZipper s of
-  Just (DirEntry {}) -> openTabDir False s
+  Just DirEntry {} -> openTabDir False s
   Just (FileEntry n p i) -> openTabFile (FileEntry n p i) s
   _ -> continue s
 
@@ -165,11 +165,11 @@ openTabDir inNew = updateZipperEv (openSelectedDir inNew)
 
 openSelectedDir :: Bool -> Tab -> EventM Name (TabZipper -> TabZipper)
 openSelectedDir inNew tab = case selectedEntry tab of
-  Just (DirEntry {entryPath = path}) -> (if inNew then insertFixed else replace) <$> (liftIO $ makeDirTab path)
+  Just DirEntry {entryPath = path} -> (if inNew then insertFixed else replace) <$> liftIO (makeDirTab path)
   _ -> return id
 
 reloadCurrentTab :: Tab -> EventM Name (TabZipper -> TabZipper)
-reloadCurrentTab tab = replace <$> (liftIO $ reload tab)
+reloadCurrentTab tab = replace <$> liftIO (reload tab)
 
 updateCurrentTab :: Event -> Tab -> EventM Name (TabZipper -> TabZipper)
 updateCurrentTab ev tab = replace <$> handleTabEvent ev tab
