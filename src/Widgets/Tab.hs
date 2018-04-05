@@ -1,7 +1,7 @@
 module Widgets.Tab where
 import Types
 
-import Data.List (sortOn)
+import Data.List (sortOn, isInfixOf)
 import Data.Char (toLower)
 import Data.Vector (fromList)
 import Data.Maybe (fromMaybe)
@@ -21,21 +21,19 @@ import Brick.Widgets.Border.Style (unicodeRounded, unicodeBold, bsHorizontal, bs
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 import Data.Foldable (toList)
 
-data Tab = DirTab {tabName :: String, tabPath :: FilePath, entryList :: List Name Entry, entryOrder :: EntryOrder} | EmptyTab
+data Tab = DirTab {tabName :: String, tabPath :: FilePath, entryList :: List Name Entry, entryOrder :: EntryOrder} |
+  SearchTab {tabName :: String, tabPath :: FilePath, tabQuery :: String, entryList :: List Name Entry, entryOrder :: EntryOrder} |
+  EmptyTab
 data Entry = DirEntry {entryName :: String, entryPath :: FilePath, entryInfo :: EntryInfo} |
   FileEntry {entryName :: String, entryPath :: FilePath, entryInfo :: EntryInfo}
 data EntryInfo = EntryInfo {entrySize :: Integer, entryPerms :: Maybe Permissions, entryTimes :: Maybe (UTCTime, UTCTime)} deriving Show
 data EntryOrder = EntryOrder {orderType :: OrderType, inverted :: Bool}
 data OrderType = FileName | FileSize | AccessTime | ModificationTime deriving (Eq, Enum, Bounded)
 
-instance Eq Tab where
-  EmptyTab == EmptyTab = True
-  (DirTab {tabPath = p1}) == (DirTab {tabPath = p2}) = p1 == p2
-  _ == _ = False
-
 instance Show Tab where
-  show EmptyTab = "-new tab-"
-  show (DirTab {tabName = name}) = name
+  show EmptyTab = "\x276f -new tab-"
+  show DirTab {tabName = name} = "\x2636 " ++ name
+  show SearchTab {tabName = name} = "\x26B2 " ++ name
 
 instance Show Entry where
   show (DirEntry {entryName = n}) = "+ " ++ n
@@ -61,17 +59,34 @@ makeDirTab path = do
   if isDir && not isFile then do
     let fName = takeFileName path
         order = EntryOrder FileName False
-    entryLst <- makeEntryList order path
+    entryLst <- makeTabEntryList order path
     return $ DirTab (if null fName then "-root-" else fName) path entryLst order
   else return makeEmptyTab
 
-makeEntryList :: EntryOrder -> FilePath -> IO (List Name Entry)
-makeEntryList order dir = do
+makeTabEntryList :: EntryOrder -> FilePath -> IO (List Name Entry)
+makeTabEntryList order dir = do
   sub <- listDirectory dir
   entries <- mapM (makeEntry . (dir </>)) sub
   let upPath = takeDirectory dir
   upDir <- DirEntry ".." upPath <$> makeEntryInfo upPath
   return $ list EList (fromList . (upDir :) $ sortEntries order entries) 1
+
+makeSearchTab :: FilePath -> String -> IO Tab
+makeSearchTab path query = do
+  isFile <- doesFileExist path
+  isDir <- doesDirectoryExist path
+  if isDir && not isFile then do
+    let order = EntryOrder FileName False
+    entryLst <- makeSearchEntryList order path query
+    return $ SearchTab query path query entryLst order
+  else return makeEmptyTab
+
+makeSearchEntryList :: EntryOrder -> FilePath -> String -> IO (List Name Entry)
+makeSearchEntryList order dir query = do
+  searchResult <- searchRecursive dir query
+  entries <- mapM makeEntry searchResult
+  searchDir <- DirEntry "." dir <$> makeEntryInfo dir
+  return $ list EList (fromList . (searchDir :) $ sortEntries order entries) 1
 
 makeEntry :: FilePath -> IO Entry
 makeEntry path = do
@@ -113,16 +128,16 @@ renderPathSeparator t = hBox [
 
 renderEntryOrder :: Tab -> Widget Name
 renderEntryOrder tab = str $ case tab of
-  DirTab {entryOrder = order} -> " by " ++ show order
-  _ -> ""
+  EmptyTab -> ""
+  _ -> " by " ++ (show $ entryOrder tab)
 
 renderPath :: Tab -> Widget Name
 renderPath tab = str $ case tab of
   EmptyTab -> " <empty tab> "
   DirTab {tabPath = path} -> " " ++ path ++ " "
+  SearchTab {tabPath = p, tabQuery = q} -> " search for " ++ q ++ " in " ++ takeFileName p
 
 renderContent :: Tab -> Widget Name
-renderContent (DirTab {entryList = enList}) = renderList renderEntry True enList
 renderContent EmptyTab = vBox (lns ++ [fill ' '])
   where lns = map strWrap $ lines "Command Line Interface File Manager\n \n\
     \clifm allows you to explore directories on multiple tabs.\nIf your terminal\
@@ -134,6 +149,7 @@ renderContent EmptyTab = vBox (lns ++ [fill ' '])
     \BackTab key or use Ctrl + Left or Right arrow key to swap them.\n \nYou can \
     \see every other possible action as a button in the bottom, or you can use \
     \them as Keys combination.\n \nTo see them all please refer to the README"
+renderContent tab = renderList renderEntry True $ entryList tab
 
 renderEntry :: Bool -> Entry -> Widget Name
 renderEntry _ en = let info = entryInfo en in vLimit 1 $ hBox [
@@ -166,8 +182,20 @@ tabButtons DirTab {entryOrder = order} = [
     (str "paste", 'v', True),
     (keybindStr "r" <+> str "ename", 'r', True),
     (keybindStr "d" <+> str "elete", 'd', True),
+    (keybindStr "s" <+> str "earch", 's', True),
     (keybindStr "m" <+> str "ake dir", 'm', False),
     (keybindStr "t" <+> str "ouch file", 't', False),
+    (keybindStr "s" <+> str "how info", 's', False),
+    (keybindStr "r" <+> str "efresh", 'r', False),
+    (keybindStr "o" <+> str "pen in new tab", 'o', True),
+    (keybindStr "o" <+> str ("rder by " ++ (show . nextOrderType $ orderType order)), 'o', False),
+    (keybindStr "i" <+> str "nvert order", 'i', False)
+  ]
+tabButtons SearchTab {entryOrder = order} = [
+    (str "cut", 'x', True),
+    (str "copy", 'c', True),
+    (keybindStr "r" <+> str "ename", 'r', True),
+    (keybindStr "d" <+> str "elete", 'd', True),
     (keybindStr "s" <+> str "how info", 's', False),
     (keybindStr "r" <+> str "efresh", 'r', False),
     (keybindStr "o" <+> str "pen in new tab", 'o', True),
@@ -193,8 +221,8 @@ changeOrder tab = tab {entryOrder = newOrder,  entryList = newEntryList}
     order = entryOrder tab
     newOrder = order {orderType = nextOrderType $ orderType order}
     eLst = entryList tab
-    (upDir:entries) = toList eLst
-    sorted = upDir : sortEntries newOrder entries
+    (fstDir:entries) = toList eLst
+    sorted = fstDir : sortEntries newOrder entries
     newEntryList = listReplace (fromList sorted) (Just 0) eLst
 
 invertOrder :: Tab -> Tab
@@ -204,28 +232,27 @@ invertOrder tab = tab {entryOrder = newOrder, entryList = newEntryList}
     order = entryOrder tab
     newOrder = order {inverted = not $ inverted order}
     eLst = entryList tab
-    upDir = head $ toList eLst
-    newEntryList = listInsert 0 upDir . listReverse $ listRemove 0 eLst
+    fstDir = head $ toList eLst
+    newEntryList = listInsert 0 fstDir . listReverse $ listRemove 0 eLst
 
 reload :: Tab -> IO Tab
 reload tab = case tab of
   EmptyTab -> return EmptyTab
-  tab -> do
-    reloadedList <- makeEntryList (entryOrder tab) (tabPath tab)
+  DirTab {tabPath = path, entryOrder = order} -> do
+    reloadedList <- makeTabEntryList order path
+    return tab {entryList = reloadedList}
+  SearchTab {tabPath = path, entryOrder = order, tabQuery = query} -> do
+    reloadedList <- makeSearchEntryList order path query
     return tab {entryList = reloadedList}
 
 moveToRow :: Int -> Tab -> Tab
 moveToRow _ EmptyTab = EmptyTab
-moveToRow row dirTab = dirTab {entryList = (listMoveTo row $ entryList dirTab)}
+moveToRow row tab = tab {entryList = (listMoveTo row $ entryList tab)}
 
 -- utility functions
-maybeTabPath :: Tab -> Maybe FilePath
-maybeTabPath EmptyTab = Nothing
-maybeTabPath (DirTab {tabPath = path}) = Just path
-
 selectedEntry :: Tab -> Maybe Entry
 selectedEntry EmptyTab = Nothing
-selectedEntry (DirTab {entryList = enList}) = case listSelectedElement enList of
+selectedEntry tab = case listSelectedElement $ entryList tab of
   Just (_, entry) -> Just entry
   _ -> Nothing
 
@@ -257,3 +284,21 @@ sortEntries order = (if inverted order then reverse else id) . case orderType or
 
 zeroTime :: UTCTime
 zeroTime = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
+
+searchRecursive :: FilePath -> String -> IO [FilePath]
+searchRecursive path query = do
+  subNames <- listDirectory path
+  paths <- listRecursive $ map (path </>) subNames
+  return $ filter (isInfixOf query . takeFileName) paths
+
+listRecursive :: [FilePath] -> IO [FilePath]
+listRecursive [] = return []
+listRecursive (path:paths) = do
+  isDir <- doesDirectoryExist path
+  isFile <- doesFileExist path
+  if isFile then (path :) <$> listRecursive paths
+  else if isDir then do
+    subNames <- listDirectory path
+    let subPaths = map (path </>) subNames
+    (path :) <$> listRecursive (subPaths ++ paths)
+  else listRecursive paths

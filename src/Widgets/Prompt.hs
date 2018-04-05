@@ -24,7 +24,7 @@ data Prompt = Prompt {originTab :: Tab, action :: PromptAction} deriving Show
 type PathEditor = Editor FilePath Name
 data PromptAction = Copy Entry FilePath | Cut Entry FilePath | Rename PathEditor Entry |
   Delete Entry | Mkdir PathEditor FilePath | Touch PathEditor FilePath |
-  GoTo PathEditor | DisplayInfo EntryInfo | DisplayError String
+  GoTo PathEditor | Search PathEditor FilePath | DisplayInfo EntryInfo | DisplayError String
 
 instance Show PromptAction where
   show (Copy _ _) = " Copy "
@@ -35,6 +35,7 @@ instance Show PromptAction where
   show (Touch _ _) = " Touch File "
   show (GoTo _) = " Go To "
   show (DisplayInfo _) = " Entry Info "
+  show (Search _ _) = " Search "
   show _ = " Error "
 
 -- creation functions
@@ -45,11 +46,12 @@ makePathEditor :: FilePath -> PathEditor
 makePathEditor = editor PEdit (Just 1)
 
 makePastePrompt :: Clipboard -> Tab -> Prompt
-makePastePrompt c tab = Prompt tab $ case (c, maybeTabPath tab) of
-  (_, Nothing) -> DisplayError "The current tab is not a directory"
+makePastePrompt c tab = Prompt tab $ case (c, tab) of
   (EmptyBoard, _) -> DisplayError "The clipboard is empty"
-  (CopyBoard {fromEntry = entry}, Just path) -> Copy entry path
-  (CutBoard {fromEntry = entry}, Just path) -> Cut entry path
+  (_, EmptyTab) -> DisplayError "You cannot paste into an empty tab"
+  (_, SearchTab {}) -> DisplayError "You cannot paste into a search tab"
+  (CopyBoard {fromEntry = entry}, DirTab{tabPath = path}) -> Copy entry path
+  (CutBoard {fromEntry = entry}, DirTab{tabPath = path}) -> Cut entry path
 
 makeGoToPrompt :: Tab -> Prompt
 makeGoToPrompt tab = Prompt tab $ GoTo emptyPathEditor
@@ -62,22 +64,25 @@ makeDeletePrompt :: Tab -> Prompt
 makeDeletePrompt = withSelectedEntry Delete
 
 makeMkdirPrompt :: Tab -> Prompt
-makeMkdirPrompt = withTabPath (Mkdir emptyPathEditor)
+makeMkdirPrompt = withDirTabPath (Mkdir emptyPathEditor)
 
 makeTouchPrompt :: Tab -> Prompt
-makeTouchPrompt = withTabPath (Touch emptyPathEditor)
+makeTouchPrompt = withDirTabPath (Touch emptyPathEditor)
 
 makeDisplayInfoPrompt :: Tab -> Prompt
 makeDisplayInfoPrompt = withSelectedEntry (DisplayInfo . entryInfo)
+
+makeSearchPrompt :: Tab -> Prompt
+makeSearchPrompt = withDirTabPath (Search emptyPathEditor)
 
 withSelectedEntry :: (Entry -> PromptAction) -> Tab -> Prompt
 withSelectedEntry func tab = Prompt tab $ case selectedEntry tab of
   Just entry -> func entry
   _ -> DisplayError "This tab does not have a selected entry"
 
-withTabPath :: (FilePath -> PromptAction) -> Tab -> Prompt
-withTabPath func tab = Prompt tab $ case maybeTabPath tab of
-   Just path -> func path
+withDirTabPath :: (FilePath -> PromptAction) -> Tab -> Prompt
+withDirTabPath func tab = Prompt tab $ case tab of
+   DirTab {tabPath = path} -> func path
    _ -> DisplayError "This tab does not represent a directory"
 
 -- rendering functions
@@ -97,6 +102,7 @@ renderBody pr = vBox $ case action pr of
   Mkdir edit _ -> str "Directory name:" : renderValidatedEditor edit
   Touch edit _ -> str "File name:" : renderValidatedEditor edit
   GoTo edit -> str "Directory to open:" : renderValidatedEditor edit
+  Search edit _ -> str "Search for:" : renderValidatedEditor edit
   DisplayInfo info -> map strWrap . (displaySize info :) $ displayPerms info ++ displayTimes info
   DisplayError msg -> [str "Whoops, this went wrong:", withDefAttr errorAttr $ strWrap msg]
 
@@ -149,6 +155,7 @@ renderFooter act = kb "Enter" <+> str txt <+> kb "Esc" <+> str " to close and go
       Mkdir _ _ -> " to make the directory, "
       Touch _ _ -> " to touch the file, "
       GoTo _ -> " to change directory, "
+      Search _ _ -> " to search, "
       _ -> " or "
 
 -- event-handling functions
@@ -178,6 +185,7 @@ processAction (Prompt {originTab = tab, action = act}) = case act of
   Mkdir edit path -> createDirectory (path </> getEditLine edit) *> reload tab
   Touch edit path -> writeFile (path </> getEditLine edit) "" *> reload tab
   GoTo edit -> processGoTo $ getEditLine edit
+  Search edit path -> makeSearchTab path $ getEditLine edit
   _ -> return tab
 
 processGoTo :: FilePath -> IO Tab
@@ -194,6 +202,7 @@ handleActionEditor ev act = case act of
   Mkdir edit path -> (`Mkdir` path) <$> handleEditorEvent ev edit
   Touch edit path -> (`Touch` path) <$> handleEditorEvent ev edit
   GoTo edit -> GoTo <$> handleEditorEvent ev edit
+  Search edit path -> (`Search` path) <$> handleEditorEvent ev edit
   _ -> return act
 
 -- utility functions

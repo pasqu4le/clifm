@@ -93,6 +93,7 @@ handleMain (VtyEvent ev) = case ev of
   EvKey (KChar 'r') [MCtrl] -> openPrompt makeRenamePrompt
   EvKey (KChar 'd') [MCtrl] -> openPrompt makeDeletePrompt
   EvKey (KChar 'o') [MCtrl] -> openTabDir True
+  EvKey (KChar 's') [MCtrl] -> openPrompt makeSearchPrompt
   EvKey (KChar 'k') [] -> updateZipper removeTab
   EvKey (KChar 's') [] -> openPrompt makeDisplayInfoPrompt
   EvKey (KChar 'm') [] -> openPrompt makeMkdirPrompt

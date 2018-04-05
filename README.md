@@ -30,6 +30,7 @@ If your terminal supports a mouse you can use it to change tab, click a button o
 - Ctrl+R: **R**ename the selected Item
 - Ctrl+D: **D**elete the selected Item
 - Ctrl+O: **O**pen the selected directory in a New Tab
+- Ctrl+S: **S**earch for a file/folder in the current Tab's directory
 - K: **K**ill (close) the current Tab
 - S: **S**how info about the selected Item
 - M: **M**ake a new directory
@@ -93,5 +94,4 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 - more settings (using command line arguments)
 - mc directory comparison
 - multi-pane view
-- searching
 - find a way to read correctly a directory size
