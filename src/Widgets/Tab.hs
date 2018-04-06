@@ -1,9 +1,8 @@
 module Widgets.Tab where
 import Types
 
-import Data.List (sortOn, isInfixOf)
+import Data.List (sortOn, isInfixOf, elemIndex)
 import Data.Char (toLower)
-import Data.Vector (fromList)
 import Data.Maybe (fromMaybe)
 import Data.Time.Clock (UTCTime(..), secondsToDiffTime)
 import Data.Time.Calendar (Day(ModifiedJulianDay))
@@ -15,11 +14,12 @@ import System.Directory (Permissions, getPermissions, readable, writable, execut
 import Brick.Types (Widget, EventM)
 import Brick.Widgets.Core (hLimit, vLimit, hBox, vBox, (<+>), str, strWrap, fill, withBorderStyle, visible)
 import Brick.Widgets.List (List, list, renderList, handleListEvent, listMoveTo,
-  listSelectedElement, listInsert, listRemove, listReverse, listReplace)
+  listSelectedElement, listInsert, listRemove, listReverse, listReplace, listElements)
 import Brick.Widgets.Border (hBorder, vBorder, borderElem, border)
 import Brick.Widgets.Border.Style (unicodeRounded, unicodeBold, bsHorizontal, bsCornerTL, bsCornerTR)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 import Data.Foldable (toList)
+import qualified Data.Vector as Vect
 import Data.ByteUnits (ByteValue(..), ByteUnit(Bytes), getShortHand, getAppropriateUnits)
 
 data Tab = DirTab {tabName :: String, tabPath :: FilePath, entryList :: List Name Entry, entryOrder :: EntryOrder} |
@@ -39,6 +39,11 @@ instance Show Tab where
 instance Show Entry where
   show DirEntry {entryName = n} = "+ " ++ n
   show FileEntry {entryName = n} = "- " ++ n
+
+instance Eq Entry where
+  DirEntry {entryPath = p1} == DirEntry {entryPath = p2} = p1 == p2
+  FileEntry {entryPath = p1} == FileEntry {entryPath = p2} = p1 == p2
+  _ == _ = False
 
 instance Show EntryOrder where
   show order = show (orderType order) ++ (if inverted order then " \x2193 " else " \x2191 ")
@@ -70,7 +75,7 @@ makeTabEntryList order dir = do
   entries <- mapM (makeEntry . (dir </>)) sub
   let upPath = takeDirectory dir
   upDir <- DirEntry ".." upPath <$> makeEntryInfo upPath
-  return $ list EList (fromList . (upDir :) $ sortEntries order entries) 1
+  return $ list EList (Vect.fromList . (upDir :) $ sortEntries order entries) 1
 
 makeSearchTab :: FilePath -> String -> IO Tab
 makeSearchTab path query = do
@@ -87,7 +92,7 @@ makeSearchEntryList order dir query = do
   searchResult <- searchRecursive dir query
   entries <- mapM makeEntry searchResult
   searchDir <- DirEntry "." dir <$> makeEntryInfo dir
-  return $ list EList (fromList . (searchDir :) $ sortEntries order entries) 1
+  return $ list EList (Vect.fromList . (searchDir :) $ sortEntries order entries) 1
 
 makeEntry :: FilePath -> IO Entry
 makeEntry path = do
@@ -224,7 +229,9 @@ changeOrder tab = tab {entryOrder = newOrder,  entryList = newEntryList}
     eLst = entryList tab
     (fstDir:entries) = toList eLst
     sorted = fstDir : sortEntries newOrder entries
-    newEntryList = listReplace (fromList sorted) (Just 0) eLst
+    selected = fromMaybe fstDir $ selectedEntry tab
+    newIndex = Just . fromMaybe 0 $ elemIndex selected sorted
+    newEntryList = listReplace (Vect.fromList sorted) newIndex eLst
 
 invertOrder :: Tab -> Tab
 invertOrder EmptyTab = EmptyTab
@@ -233,18 +240,24 @@ invertOrder tab = tab {entryOrder = newOrder, entryList = newEntryList}
     order = entryOrder tab
     newOrder = order {inverted = not $ inverted order}
     eLst = entryList tab
-    fstDir = head $ toList eLst
-    newEntryList = listInsert 0 fstDir . listReverse $ listRemove 0 eLst
+    entries = listElements eLst
+    index = selectedIndex eLst
+    newIndex = Just $ if index == 0 then 0 else Vect.length entries - index
+    reversed = Vect.cons (Vect.head entries) . Vect.reverse $ Vect.tail entries
+    newEntryList = listReplace reversed newIndex eLst
 
 reload :: Tab -> IO Tab
 reload tab = case tab of
   EmptyTab -> return EmptyTab
-  DirTab {tabPath = path, entryOrder = order} -> do
-    reloadedList <- makeTabEntryList order path
-    return tab {entryList = reloadedList}
-  SearchTab {tabPath = path, entryOrder = order, tabQuery = query} -> do
-    reloadedList <- makeSearchEntryList order path query
-    return tab {entryList = reloadedList}
+  DirTab {tabPath=p, entryOrder=o} -> keepSelection tab <$> makeTabEntryList o p
+  SearchTab {tabPath=p, entryOrder=o, tabQuery=q} -> keepSelection tab <$> makeSearchEntryList o p q
+
+keepSelection :: Tab -> List Name Entry -> Tab
+keepSelection tab newList = tab {entryList = listMoveTo index newList}
+  where
+    fstDir = Vect.head . listElements $ entryList tab
+    selected = fromMaybe fstDir $ selectedEntry tab
+    index = fromMaybe 0 . Vect.elemIndex selected $ listElements newList
 
 moveToRow :: Int -> Tab -> Tab
 moveToRow _ EmptyTab = EmptyTab
@@ -256,6 +269,11 @@ selectedEntry EmptyTab = Nothing
 selectedEntry tab = case listSelectedElement $ entryList tab of
   Just (_, entry) -> Just entry
   _ -> Nothing
+
+selectedIndex :: List Name Entry -> Int
+selectedIndex entries = case listSelectedElement entries of
+  Just (n, _) -> n
+  _ -> 0
 
 toMaybe :: Either SomeException b -> Maybe b
 toMaybe = either (const Nothing) Just
