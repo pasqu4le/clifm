@@ -1,6 +1,7 @@
 module Main where
 import Types
 import Widgets.Manager
+import Widgets.Tab (Tab)
 
 import Options.Applicative
 import System.Directory (doesDirectoryExist, doesFileExist, makeAbsolute)
@@ -9,6 +10,7 @@ import Control.Monad (void)
 import Brick.Main (customMain, showFirstCursor, App(..))
 import Brick.Themes (Theme, themeToAttrMap, loadCustomizations)
 import Brick.AttrMap (AttrMap)
+import Brick.BChan (newBChan)
 import Graphics.Vty (mkVty, standardIOConfig, setMode, outputIface, Mode(Mouse))
 
 -- entry point: parses the arguments and starts the brick application
@@ -66,10 +68,11 @@ runUI options = do
         v <- mkVty =<< standardIOConfig
         setMode (outputIface v) Mouse True
         return v
-  state <- makeState path $ editComm options
-  void $ customMain buildVty Nothing (app atrm) state
+  eventChan <- Brick.BChan.newBChan 10
+  state <- makeState path (editComm options) eventChan
+  void $ customMain buildVty (Just eventChan) (app atrm) state
 
-app :: AttrMap -> App State e Name
+app :: AttrMap -> App State (ThreadEvent Tab) Name
 app atrm = App { appDraw = drawUi,
     appStartEvent = return,
     appHandleEvent = handleEvent,

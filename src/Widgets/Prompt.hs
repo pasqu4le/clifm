@@ -4,15 +4,19 @@ import Widgets.Tab
 import Widgets.Clipboard
 
 import Data.Monoid ((<>))
+import Data.Functor (($>))
 import Control.Monad(when,forM_)
 import Control.Monad.IO.Class (liftIO)
-import Control.Exception (try, throw, displayException, SomeException)
+import Control.Concurrent (threadDelay, forkFinally, ThreadId, killThread)
+import Control.Exception (try, throw, displayException, SomeException, fromException)
+import Control.Exception.Base (AsyncException(ThreadKilled))
 import Control.Applicative ((*>), (<$>))
 import Brick.Widgets.Core ((<+>), str, strWrap, vBox, hLimit, padLeftRight, padTopBottom, withDefAttr)
 import Brick.Widgets.Border (borderWithLabel, hBorder)
-import Brick.Types (Widget, EventM)
+import Brick.Types (Widget, EventM, BrickEvent(..))
 import Brick.Widgets.Center (centerLayer, hCenter)
 import Brick.Widgets.Edit (Editor, editor, renderEditor, getEditContents, handleEditorEvent)
+import Brick.BChan (BChan, writeBChan)
 import Graphics.Vty (Event(EvKey), Key(..))
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import System.FilePath (isValid, takeDirectory, (</>), takeFileName)
@@ -24,7 +28,8 @@ data Prompt = Prompt {originTab :: Tab, action :: PromptAction} deriving Show
 type PathEditor = Editor FilePath Name
 data PromptAction = Copy Entry FilePath | Cut Entry FilePath | Rename PathEditor Entry |
   Delete Entry | Mkdir PathEditor FilePath | Touch PathEditor FilePath |
-  GoTo PathEditor | Search PathEditor FilePath | DisplayInfo EntryInfo | DisplayError String
+  GoTo PathEditor | Search PathEditor FilePath | DisplayInfo EntryInfo |
+  DisplayError String | Performing String ThreadId
 
 instance Show PromptAction where
   show (Copy _ _) = " Copy "
@@ -36,6 +41,7 @@ instance Show PromptAction where
   show (GoTo _) = " Go To "
   show (DisplayInfo _) = " Entry Info "
   show (Search _ _) = " Search "
+  show (Performing name _) = " Performing" ++ name
   show _ = " Error "
 
 -- creation functions
@@ -105,6 +111,7 @@ renderBody pr = vBox $ case action pr of
   Search edit _ -> str "Search for:" : renderValidatedEditor edit
   DisplayInfo info -> map strWrap . (displaySize info :) $ displayPerms info ++ displayTimes info
   DisplayError msg -> [str "Whoops, this went wrong:", withDefAttr errorAttr $ strWrap msg]
+  Performing name _ -> [str $ "Performing" ++ name, str "Please wait"]
 
 displaySize :: EntryInfo -> String
 displaySize info = "Size: " ++ show (entrySize info) ++ " Bytes (" ++ shortEntrySize info ++ ")"
@@ -134,7 +141,7 @@ tellEntry e = case e of
 disclaimer :: Widget Name
 disclaimer = withDefAttr disclaimerAttr $ strWrap "NOTE: this will operate on \
   \your file system and may be irreversible, double check it! Also please note \
-  \that when this operation starts the UI will be unresponsive until it's done."
+  \that the operation can be stopped, but will not revert what was already done."
 
 renderValidatedEditor :: PathEditor -> [Widget Name]
 renderValidatedEditor e = [renderEditor (str . unlines) True e, validLine]
@@ -144,7 +151,9 @@ renderValidatedEditor e = [renderEditor (str . unlines) True e, validLine]
       else withDefAttr errorAttr $ str " ^ invalid filepath!"
 
 renderFooter :: PromptAction -> Widget Name
-renderFooter act = kb "Enter" <+> str txt <+> kb "Esc" <+> str " to close and go back"
+renderFooter act = case act of
+  Performing _ _ -> kb "Esc" <+> str " to Cancel. NOTE: will not revert what was already done."
+  _ -> kb "Enter" <+> str txt <+> kb "Esc" <+> str " to close and go back"
   where
     kb = withDefAttr keybindAttr . str
     txt = case act of
@@ -159,11 +168,47 @@ renderFooter act = kb "Enter" <+> str txt <+> kb "Esc" <+> str " to close and go
       _ -> " or "
 
 -- event-handling functions
-handlePromptEvent :: Event -> Prompt -> EventM Name (Either Prompt Tab)
-handlePromptEvent ev pr = case ev of
-  EvKey KEsc [] -> return . Right $ originTab pr
-  EvKey KEnter [] -> liftIO $ tryProcessAction pr
+handlePromptEvent :: BrickEvent Name (ThreadEvent Tab) -> Prompt -> BChan (ThreadEvent Tab) -> EventM Name (Either Prompt Tab)
+handlePromptEvent (AppEvent ev) pr _ = case ev of
+  ThreadError err -> return $ Left pr {action = DisplayError err}
+  ThreadSuccess tab -> return $ Right tab
+  ThreadClosed -> return . Right $ originTab pr
+handlePromptEvent (VtyEvent ev) pr eChan = case ev of
+  EvKey KEsc [] -> liftIO $ exitPrompt pr
+  EvKey KEnter [] -> liftIO $ performAction pr eChan
   _ -> Left . Prompt (originTab pr) <$> handleActionEditor ev (action pr)
+handlePromptEvent _ pr _ = return $ Left pr
+
+exitPrompt :: Prompt -> IO (Either Prompt Tab)
+exitPrompt pr = case action pr of
+  Performing name tId -> killThread tId $> Left pr -- returns the same prompt because the actual exiting will happen because of the exception that killThread raises
+  _ -> return . Right $ originTab pr
+
+-- gets to decide if the action will be processed in a different thread or not
+performAction :: Prompt -> BChan (ThreadEvent Tab) -> IO (Either Prompt Tab) --
+performAction pr eChan = case action pr of
+  Copy _ _ -> Left <$> processThreaded pr eChan
+  Cut _ _ -> Left <$> processThreaded pr eChan
+  Rename _ _ -> Left <$> processThreaded pr eChan
+  Delete _ -> Left <$> processThreaded pr eChan
+  Search _ _ -> Left <$> processThreaded pr eChan
+  Performing _ _ -> return $ Left pr -- doesn't really make sense
+  _ -> tryProcessAction pr
+
+processThreaded :: Prompt -> BChan (ThreadEvent Tab) -> IO Prompt
+processThreaded pr eChan = do
+  tId <- forkFinally (processAction pr) (reportResult eChan)
+  return $ pr {action = Performing (show $ action pr) tId}
+
+reportResult :: BChan (ThreadEvent Tab) -> Either SomeException Tab -> IO ()
+reportResult eChan res = writeBChan eChan $ case res of
+  Left e -> endingEvent e
+  Right tabRes -> ThreadSuccess tabRes
+
+endingEvent :: SomeException -> ThreadEvent Tab
+endingEvent e = case (fromException e :: Maybe AsyncException) of
+  Just ThreadKilled -> ThreadClosed
+  _ -> ThreadError $ displayException e
 
 tryProcessAction :: Prompt -> IO (Either Prompt Tab)
 tryProcessAction pr = do

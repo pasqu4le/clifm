@@ -13,17 +13,25 @@ import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, viewport, withBorderS
 import Brick.Types (Widget, BrickEvent(..), EventM, Next, ViewportType(..), Location(..))
 import Brick.Widgets.Border (border, hBorder, borderWithLabel)
 import Brick.Widgets.Border.Style (unicodeBold)
+import Brick.BChan (BChan)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 import Data.Foldable (toList)
 import Data.List.PointedList (PointedList, _focus, replace, delete, singleton, insert, insertLeft, moveTo, withFocus, atStart, atEnd)
 import Data.List.PointedList.Circular (next, previous)
 
-data State = State {tabZipper :: TabZipper, clipboard :: Clipboard, prompt :: Maybe Prompt, editorCommand :: String}
+data State = State {tabZipper :: TabZipper,
+    clipboard :: Clipboard,
+    prompt :: Maybe Prompt,
+    editorCommand :: String,
+    eventChan :: BChan (ThreadEvent Tab)
+  }
 type TabZipper = PointedList Tab
 
 -- creation functions
-makeState :: FilePath -> String -> IO State
-makeState path editCom = (\zp -> State zp EmptyBoard Nothing editCom) <$> makeTabZipper path
+makeState :: FilePath -> String -> BChan (ThreadEvent Tab) -> IO State
+makeState path editCom eChan = do
+  zp <- makeTabZipper path
+  return $ State zp EmptyBoard Nothing editCom eChan
 
 makeTabZipper :: FilePath -> IO TabZipper
 makeTabZipper path = singleton <$> makeDirTab path
@@ -70,20 +78,19 @@ indipendentButtons = [
   ]
 
 -- event handling functions
-handleEvent :: State -> BrickEvent Name e -> EventM Name (Next State)
+handleEvent :: State -> BrickEvent Name (ThreadEvent Tab) -> EventM Name (Next State)
 handleEvent state event = case prompt state of
   Just pr -> handlePrompt event pr state
   _ -> handleMain event state
 
-handlePrompt :: BrickEvent Name e -> Prompt -> State -> EventM Name (Next State)
-handlePrompt (VtyEvent ev) pr state = do
-  promptRes <- handlePromptEvent ev pr
+handlePrompt :: BrickEvent Name (ThreadEvent Tab) -> Prompt -> State -> EventM Name (Next State)
+handlePrompt ev pr state = do
+  promptRes <- handlePromptEvent ev pr (eventChan state)
   case promptRes of
     Left pr -> updatePrompt pr state --updates the prompt and keeps it up
     Right tab -> updateZipper (replace tab) state --replaces with the resulting tab and closes the prompt
-handlePrompt _ _ state = continue state
 
-handleMain :: BrickEvent Name e -> State -> EventM Name (Next State)
+handleMain :: BrickEvent Name (ThreadEvent Tab) -> State -> EventM Name (Next State)
 handleMain (VtyEvent ev) = case ev of
   EvKey KEsc [] -> halt
   EvKey (KChar 'q') [] -> halt

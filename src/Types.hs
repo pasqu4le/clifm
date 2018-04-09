@@ -10,8 +10,9 @@ import Brick.Util (on, fg, bg)
 import Brick.Widgets.Edit (editFocusedAttr)
 import Brick.Widgets.List (listSelectedFocusedAttr)
 
--- names
+-- names and events
 data Name = BVal Char Bool | LScroll | LNum Int | PEdit | EList deriving (Ord, Show, Eq)
+data ThreadEvent a = ThreadClosed | ThreadSuccess a | ThreadError String
 
 -- attributes and themes
 defaultTheme :: Theme

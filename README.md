@@ -91,7 +91,6 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 > Attribute names with multiple components (e.g. attr1 <> attr2) can be referenced in customization files by separating the names with a dot. For example, the attribute name "list" <> "selected" can be referenced by using the string "list.selected".
 
 ## TODOs
-- treaded IO operations (that do not freeze the UI and can be canceled)
 - more settings (using command line arguments)
 - mc directory comparison
 - multi-pane view
