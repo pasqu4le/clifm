@@ -5,13 +5,13 @@ import Brick.Widgets.Core (withDefAttr, str)
 import Brick.Types (Widget)
 import Brick.Themes (Theme, newTheme)
 import Brick.AttrMap (AttrName, AttrMap, attrName, attrMap)
-import Graphics.Vty (defAttr, withStyle, underline, black, yellow, white, blue, red)
+import Graphics.Vty (Key(..), defAttr, withStyle, underline, black, yellow, white, blue, red)
 import Brick.Util (on, fg, bg)
 import Brick.Widgets.Edit (editFocusedAttr)
 import Brick.Widgets.List (listSelectedFocusedAttr, listSelectedAttr)
 
 -- data definitions
-data Name = Button {charBind :: Char, withCtrl :: Bool} |
+data Name = Button {keyBind :: Key, withCtrl :: Bool} |
   LabelsRow {pnName :: PaneName} |
   Label {pnName :: PaneName, labelNum :: Int} |
   PromptEditor |

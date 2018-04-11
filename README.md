@@ -19,21 +19,30 @@ Clifm is a [brick](https://github.com/jtdaugherty/brick) application, that in tu
 
 If your terminal supports a mouse you can use it to change Tab/Pane, click a button on the bottom or change your selection, but only using the keyboard you can perform every possible action. This is the list of all the keybindings:
 
+#### Bottom menu
+- L: open Se**l**ection menu
+- A: open T**a**b menu
+- P: open **P**ane menu
+- BackSpace: go **back** to main menu
+- Esc/Q: **Q**uit
+
+#### Selection
+- Enter: Open directory/run executable file/open readable file in editor
+- Ctrl+(X/C): Cut/Copy the selected Item
 - Up/Down Arrow: move the selection in the current Tab
 - PageUp/PageDown: move the selection in the current Tab by one page at a time
 - Home/End: move the selection in the current Tab to beginning or end of list
-- Enter: Open directory/run executable file/open readable file in editor
-- Tab/BackTab: Move to the next/previous tab
-- Ctrl+(Left/Right Arrow): Swap current tab's position with the previous/next one
-- Esc/Q: **Q**uit
-- Ctrl+(X/C): Cut/Copy the selected Item
-- Ctrl+V: Paste in the current Tab's directory
 - Ctrl+R: **R**ename the selected Item
 - Ctrl+D: **D**elete the selected Item
 - Ctrl+O: **O**pen the selected directory in a New Tab
+- S: **S**how info about the selected Item
+
+#### Tabs
+- Tab/BackTab: Move to the next/previous tab
+- Ctrl+(Left/Right Arrow): Swap current tab's position with the previous/next one
+- Ctrl+V: Paste in the current Tab's directory
 - Ctrl+S: **S**earch for a file/folder in the current Tab's directory
 - K: **K**ill (close) the current Tab
-- S: **S**how info about the selected Item
 - M: **M**ake a new directory
 - T: **T**ouch (create an empty) file
 - G: **G**o to another directory
@@ -41,9 +50,11 @@ If your terminal supports a mouse you can use it to change Tab/Pane, click a but
 - R: **R**efresh the current Tab
 - O: **O**rder by file name/file size/access time/modification time
 - I: **I**nvert order
+
+#### Panes
+- Left/Right Arrow: Focus on the previous/next Pane
 - Ctrl+E: Open **E**mpty Pane
 - Ctrl+K: **K**ill (close) the current Pane
-- Left/Right Arrow: Focus on the previous/next Pane
 
 The actions above will not work only if a prompt is up, or you try to do something not possible.
 
@@ -94,7 +105,5 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 > Attribute names with multiple components (e.g. attr1 <> attr2) can be referenced in customization files by separating the names with a dot. For example, the attribute name "list" <> "selected" can be referenced by using the string "list.selected".
 
 ## TODOs
-- better bottom menu (avoid too many buttons at once)
-- more settings (using command line arguments)
 - mc directory comparison (need to solve the next point first)
 - find a way to read correctly a directory size in reasonable time

@@ -2,16 +2,15 @@ module Widgets.Manager where
 import Types
 import Widgets.Pane
 import Widgets.Tab
-import Widgets.Clipboard
+import Widgets.Menu
 import Widgets.Prompt
 
 import System.Process (callCommand)
 import Control.Exception (try, SomeException)
-import Data.Char (toUpper)
 import Brick.Main (continue, halt, suspendAndResume)
-import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, withBorderStyle, clickable)
+import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, withBorderStyle)
 import Brick.Types (Widget, BrickEvent(..), EventM, Next, ViewportType(..), Location(..))
-import Brick.Widgets.Border (border, vBorder, hBorder, borderWithLabel)
+import Brick.Widgets.Border (vBorder, hBorder)
 import Brick.Widgets.Border.Style (unicodeBold)
 import Brick.BChan (BChan)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
@@ -22,7 +21,7 @@ import Data.List.PointedList.Circular (next, previous)
 
 data State = State {paneZipper :: PaneZipper,
     lastPaneName :: PaneName,
-    clipboard :: Clipboard,
+    bottomMenu :: Menu,
     prompt :: Maybe Prompt,
     editorCommand :: String,
     eventChan :: BChan (ThreadEvent Tab)
@@ -33,7 +32,7 @@ type PaneZipper = PointedList Pane
 makeState :: FilePath -> String -> BChan (ThreadEvent Tab) -> IO State
 makeState path editCom eChan = do
   pane <- makePane 0 path
-  return $ State (singleton pane) 0 EmptyBoard Nothing editCom eChan
+  return $ State (singleton pane) 0 makeMenu Nothing editCom eChan
 
 -- rendering functions
 drawUi :: State -> [Widget Name]
@@ -46,30 +45,10 @@ renderMainUI state = vBox [panes, botSep, menu]
   where
     panes = renderPanes $ paneZipper state
     botSep = withBorderStyle unicodeBold hBorder
-    menu = vLimit 3 $ renderMenu state
+    menu = vLimit 3 $ renderMenu (bottomMenu state) (currentPane state)
 
 renderPanes :: PaneZipper -> Widget Name
 renderPanes = hBox . intersperse vBorder . map renderPane . toList . withFocus
-
-renderMenu :: State -> Widget Name
-renderMenu st = hBox . (renderClipboard (clipboard st) :) . renderButtons . currentTab $ currentPane st
-
-renderButtons :: Tab -> [Widget Name]
-renderButtons tab = map renderButton $ tabButtons tab ++ indipendentButtons
-
-renderButton :: (Widget Name, Char, Bool) -> Widget Name
-renderButton (s, c, b) = clickable Button {charBind = c, withCtrl = b} $ btBr s
-  where btBr = if b then borderWithLabel (str $ "C-" ++ [toUpper c]) else border
-
-indipendentButtons :: [(Widget Name, Char, Bool)]
-indipendentButtons = [
-    (keybindStr "e" <+> str "mpty tab", 'e', False),
-    (keybindStr "g" <+> str "o to", 'g', False),
-    (keybindStr "k" <+> str "ill tab", 'k', False),
-    (keybindStr "e" <+> str "mpty pane", 'e', True),
-    (keybindStr "k" <+> str "ill pane", 'k', True),
-    (keybindStr "q" <+> str "uit", 'q', False)
-  ]
 
 -- event handling functions
 handleEvent :: State -> BrickEvent Name (ThreadEvent Tab) -> EventM Name (Next State)
@@ -87,6 +66,10 @@ handlePrompt ev pr state = do
 handleMain :: BrickEvent Name (ThreadEvent Tab) -> State -> EventM Name (Next State)
 handleMain (VtyEvent ev) = case ev of
   EvKey KEsc [] -> halt
+  EvKey KBS [] -> updateMenu MainMenu
+  EvKey (KChar 'l') [] -> updateMenu SelectionMenu
+  EvKey (KChar 'a') [] -> updateMenu TabMenu
+  EvKey (KChar 'p') [] -> updateMenu PaneMenu
   EvKey (KChar 'q') [] -> halt
   EvKey (KChar 'x') [MCtrl] -> updateClipboard makeCutBoard
   EvKey (KChar 'c') [MCtrl] -> updateClipboard makeCopyBoard
@@ -108,7 +91,7 @@ handleMain (VtyEvent ev) = case ev of
 handleMain (MouseUp name _ (Location pos)) = case name of
   EntryList {pnName = pName} -> updateCurrentPane (moveTabToRow $ snd pos) . focusOnPane pName
   Label {pnName = pName, labelNum = n} -> updateCurrentPane (updateTabZipper (moveToNth n)) . focusOnPane pName
-  Button {charBind = c, withCtrl = b} -> handleMain . VtyEvent $ EvKey (KChar c) [MCtrl | b]
+  Button {keyBind = key, withCtrl = b} -> handleMain . VtyEvent $ EvKey key [MCtrl | b]
   _ -> continue
 handleMain _ = continue
 
@@ -118,9 +101,12 @@ updateCurrentPane func state = do
   newPane <- func $ currentPane state
   continue $ state {paneZipper = replace newPane $ paneZipper state, prompt = Nothing}
 
+updateMenu :: MenuType -> State -> EventM Name (Next State)
+updateMenu tp st = continue $ st {bottomMenu = changeMenu tp $ bottomMenu st}
+
 updateClipboard :: (Entry -> Clipboard) -> State -> EventM Name (Next State)
 updateClipboard f st = continue $ case selectedEntry . currentTab $ currentPane st of
-  (Just entry) -> st {clipboard=f entry}
+  (Just entry) -> st {bottomMenu = changeClipboard (f entry) $ bottomMenu st}
   _ -> st
 
 updatePrompt :: Prompt -> State -> EventM Name (Next State)
@@ -133,7 +119,7 @@ openPrompt func state = continue $ state {prompt = Just $ func tab pName}
     pName = paneName $ currentPane state
 
 openPromptWithClip :: (Clipboard -> Tab -> PaneName -> Prompt) -> State -> EventM Name (Next State)
-openPromptWithClip func state = openPrompt (func $ clipboard state) state
+openPromptWithClip func state = openPrompt (func . clipboard $ bottomMenu state) state
 
 openTabEntry :: State -> EventM Name (Next State)
 openTabEntry state = case selectedEntry . currentTab $ currentPane state of

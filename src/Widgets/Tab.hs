@@ -181,35 +181,6 @@ renderEntryTime Nothing _ = str " -----------------"
 renderEntryTime (Just tms) sel = str . format $ (if sel then fst else snd) tms
   where format = formatTime defaultTimeLocale " %R %b %e %Y"
 
-tabButtons :: Tab -> [(Widget Name, Char, Bool)]
-tabButtons DirTab {entryOrder = order} = [
-    (str "cut", 'x', True),
-    (str "copy", 'c', True),
-    (str "paste", 'v', True),
-    (keybindStr "r" <+> str "ename", 'r', True),
-    (keybindStr "d" <+> str "elete", 'd', True),
-    (keybindStr "s" <+> str "earch", 's', True),
-    (keybindStr "m" <+> str "ake dir", 'm', False),
-    (keybindStr "t" <+> str "ouch file", 't', False),
-    (keybindStr "s" <+> str "how info", 's', False),
-    (keybindStr "r" <+> str "efresh", 'r', False),
-    (keybindStr "o" <+> str "pen in new tab", 'o', True),
-    (keybindStr "o" <+> str ("rder by " ++ (show . nextOrderType $ orderType order)), 'o', False),
-    (keybindStr "i" <+> str "nvert order", 'i', False)
-  ]
-tabButtons SearchTab {entryOrder = order} = [
-    (str "cut", 'x', True),
-    (str "copy", 'c', True),
-    (keybindStr "r" <+> str "ename", 'r', True),
-    (keybindStr "d" <+> str "elete", 'd', True),
-    (keybindStr "s" <+> str "how info", 's', False),
-    (keybindStr "r" <+> str "efresh", 'r', False),
-    (keybindStr "o" <+> str "pen in new tab", 'o', True),
-    (keybindStr "o" <+> str ("rder by " ++ (show . nextOrderType $ orderType order)), 'o', False),
-    (keybindStr "i" <+> str "nvert order", 'i', False)
-  ]
-tabButtons _ = []
-
 -- event handling and state-changing functions
 handleTabEvent :: Event -> Tab -> EventM Name Tab
 handleTabEvent _ EmptyTab = return EmptyTab

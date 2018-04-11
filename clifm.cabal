@@ -10,7 +10,7 @@ name:                clifm
 -- PVP summary:      +-+------- breaking API changes
 --                   | | +----- non-breaking API additions
 --                   | | | +--- code changes with no API change
-version:             0.3.0.0
+version:             0.3.1.0
 
 -- A short (one-line) description of the package.
 synopsis:            Command Line Interface File Manager
@@ -59,7 +59,7 @@ executable clifm
                        Widgets.Manager
                        Widgets.Pane
                        Widgets.Tab
-                       Widgets.Clipboard
+                       Widgets.Menu
                        Widgets.Prompt
 
   -- LANGUAGE extensions used by modules in this package.

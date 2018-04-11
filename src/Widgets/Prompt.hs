@@ -1,7 +1,7 @@
 module Widgets.Prompt where
 import Types
 import Widgets.Tab
-import Widgets.Clipboard
+import Widgets.Menu
 
 import Data.Monoid ((<>))
 import Data.Functor (($>))
