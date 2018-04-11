@@ -8,15 +8,21 @@ import Brick.AttrMap (AttrName, AttrMap, attrName, attrMap)
 import Graphics.Vty (defAttr, withStyle, underline, black, yellow, white, blue, red)
 import Brick.Util (on, fg, bg)
 import Brick.Widgets.Edit (editFocusedAttr)
-import Brick.Widgets.List (listSelectedFocusedAttr)
+import Brick.Widgets.List (listSelectedFocusedAttr, listSelectedAttr)
 
--- names and events
-data Name = BVal Char Bool | LScroll | LNum Int | PEdit | EList deriving (Ord, Show, Eq)
+-- data definitions
+data Name = Button {charBind :: Char, withCtrl :: Bool} |
+  LabelsRow {pnName :: PaneName} |
+  Label {pnName :: PaneName, labelNum :: Int} |
+  PromptEditor |
+  EntryList {pnName :: PaneName} deriving (Ord, Show, Eq)
 data ThreadEvent a = ThreadClosed | ThreadSuccess a | ThreadError String
+type PaneName = Int
 
 -- attributes and themes
 defaultTheme :: Theme
 defaultTheme = newTheme (white `on` black) [
+    (listSelectedAttr, fg yellow),
     (listSelectedFocusedAttr, black `on` yellow),
     (keybindAttr, fg white `withStyle` underline),
     (promptAttr, bg blue),

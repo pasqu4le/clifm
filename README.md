@@ -1,9 +1,9 @@
 # Command Line Interface File Manager
-Clifm is a small file manager written in Haskell with a command line interface. It allows you to explore directories in multiple tabs and perform basic operations.
+Clifm is a small file manager written in Haskell with a command line interface. It allows you to explore directories in multiple Panes/Tabs and perform basic operations.
 
 ![screenshot](screenshot.png)
 
-> Note: this is still an experiment and might be unstable. I do not recommend using it as your daily File Manager and I take no responsibility on what you do with it.
+> Note: this is still an experiment. Directory navigation will do no harm, but think twice before starting operations on your file system. I take no responsibility for what you do with this software.
 
 ## Building and Running
 To install clifm, you need [GHC](https://www.haskell.org/ghc/) and [cabal-install](http://hackage.haskell.org/package/cabal-install).
@@ -17,7 +17,7 @@ $ cabal install
 ## Features
 Clifm is a [brick](https://github.com/jtdaugherty/brick) application, that in turn builds upon [vty](https://github.com/jtdaugherty/vty). As such it supports a large number of terminals, but not on Windows, handles windows resizing and more.
 
-If your terminal supports a mouse you can use it to change tab, click a button on the bottom or change your selection, but only using the keyboard you can perform every possible action. This is the list of all the keybindings:
+If your terminal supports a mouse you can use it to change Tab/Pane, click a button on the bottom or change your selection, but only using the keyboard you can perform every possible action. This is the list of all the keybindings:
 
 - Up/Down Arrow: move the selection in the current Tab
 - PageUp/PageDown: move the selection in the current Tab by one page at a time
@@ -41,6 +41,9 @@ If your terminal supports a mouse you can use it to change tab, click a button o
 - R: **R**efresh the current Tab
 - O: **O**rder by file name/file size/access time/modification time
 - I: **I**nvert order
+- Ctrl+E: Open **E**mpty Pane
+- Ctrl+K: **K**ill (close) the current Pane
+- Left/Right Arrow: Focus on the previous/next Pane
 
 The actions above will not work only if a prompt is up, or you try to do something not possible.
 
@@ -91,7 +94,7 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 > Attribute names with multiple components (e.g. attr1 <> attr2) can be referenced in customization files by separating the names with a dot. For example, the attribute name "list" <> "selected" can be referenced by using the string "list.selected".
 
 ## TODOs
+- better bottom menu (avoid too many buttons at once)
 - more settings (using command line arguments)
-- mc directory comparison
-- multi-pane view
-- find a way to read correctly a directory size
+- mc directory comparison (need to solve the next point first)
+- find a way to read correctly a directory size in reasonable time

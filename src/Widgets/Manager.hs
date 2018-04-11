@@ -1,40 +1,39 @@
 module Widgets.Manager where
 import Types
+import Widgets.Pane
 import Widgets.Tab
 import Widgets.Clipboard
 import Widgets.Prompt
 
-import Control.Monad.IO.Class (liftIO)
 import System.Process (callCommand)
 import Control.Exception (try, SomeException)
 import Data.Char (toUpper)
 import Brick.Main (continue, halt, suspendAndResume)
-import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, viewport, withBorderStyle, clickable)
+import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, withBorderStyle, clickable)
 import Brick.Types (Widget, BrickEvent(..), EventM, Next, ViewportType(..), Location(..))
-import Brick.Widgets.Border (border, hBorder, borderWithLabel)
+import Brick.Widgets.Border (border, vBorder, hBorder, borderWithLabel)
 import Brick.Widgets.Border.Style (unicodeBold)
 import Brick.BChan (BChan)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 import Data.Foldable (toList)
-import Data.List.PointedList (PointedList, _focus, replace, delete, singleton, insert, insertLeft, moveTo, withFocus, atStart, atEnd)
+import Data.List (intersperse)
+import Data.List.PointedList (PointedList, _focus, replace, delete, singleton, insert, moveTo, withFocus, find)
 import Data.List.PointedList.Circular (next, previous)
 
-data State = State {tabZipper :: TabZipper,
+data State = State {paneZipper :: PaneZipper,
+    lastPaneName :: PaneName,
     clipboard :: Clipboard,
     prompt :: Maybe Prompt,
     editorCommand :: String,
     eventChan :: BChan (ThreadEvent Tab)
   }
-type TabZipper = PointedList Tab
+type PaneZipper = PointedList Pane
 
 -- creation functions
 makeState :: FilePath -> String -> BChan (ThreadEvent Tab) -> IO State
 makeState path editCom eChan = do
-  zp <- makeTabZipper path
-  return $ State zp EmptyBoard Nothing editCom eChan
-
-makeTabZipper :: FilePath -> IO TabZipper
-makeTabZipper path = singleton <$> makeDirTab path
+  pane <- makePane 0 path
+  return $ State (singleton pane) 0 EmptyBoard Nothing editCom eChan
 
 -- rendering functions
 drawUi :: State -> [Widget Name]
@@ -43,30 +42,23 @@ drawUi state = case prompt state of
   _ -> [renderMainUI state]
 
 renderMainUI :: State -> Widget Name
-renderMainUI state = vBox [labels, topSep, content, botSep,  menu]
+renderMainUI state = vBox [panes, botSep, menu]
   where
-    zipper = tabZipper state
-    labels = vLimit 2 . viewport LScroll Horizontal $ renderLabels zipper
-    topSep = renderPathSeparator $ current zipper
-    content = clickable EList . renderContent $ current zipper
+    panes = renderPanes $ paneZipper state
     botSep = withBorderStyle unicodeBold hBorder
     menu = vLimit 3 $ renderMenu state
 
-renderLabels :: TabZipper -> Widget Name
-renderLabels zipper = hBox . map clickableLabel $ zip labels [0..]
-  where labels = map renderLabel . toList $ withFocus zipper
-
-clickableLabel :: (Widget Name, Int) -> Widget Name
-clickableLabel (l, n) = clickable (LNum n) l
+renderPanes :: PaneZipper -> Widget Name
+renderPanes = hBox . intersperse vBorder . map renderPane . toList . withFocus
 
 renderMenu :: State -> Widget Name
-renderMenu st = hBox . (renderClipboard (clipboard st) :) . renderButtons . current $ tabZipper st
+renderMenu st = hBox . (renderClipboard (clipboard st) :) . renderButtons . currentTab $ currentPane st
 
 renderButtons :: Tab -> [Widget Name]
 renderButtons tab = map renderButton $ tabButtons tab ++ indipendentButtons
 
 renderButton :: (Widget Name, Char, Bool) -> Widget Name
-renderButton (s, c, b) = clickable (BVal c b) $ btBr s
+renderButton (s, c, b) = clickable Button {charBind = c, withCtrl = b} $ btBr s
   where btBr = if b then borderWithLabel (str $ "C-" ++ [toUpper c]) else border
 
 indipendentButtons :: [(Widget Name, Char, Bool)]
@@ -74,6 +66,8 @@ indipendentButtons = [
     (keybindStr "e" <+> str "mpty tab", 'e', False),
     (keybindStr "g" <+> str "o to", 'g', False),
     (keybindStr "k" <+> str "ill tab", 'k', False),
+    (keybindStr "e" <+> str "mpty pane", 'e', True),
+    (keybindStr "k" <+> str "ill pane", 'k', True),
     (keybindStr "q" <+> str "uit", 'q', False)
   ]
 
@@ -88,7 +82,7 @@ handlePrompt ev pr state = do
   promptRes <- handlePromptEvent ev pr (eventChan state)
   case promptRes of
     Left pr -> updatePrompt pr state --updates the prompt and keeps it up
-    Right tab -> updateZipper (replace tab) state --replaces with the resulting tab and closes the prompt
+    Right tab -> updateCurrentPane (updateTabZipper (replace tab)) state --updates with the resulting tab and closes the prompt
 
 handleMain :: BrickEvent Name (ThreadEvent Tab) -> State -> EventM Name (Next State)
 handleMain (VtyEvent ev) = case ev of
@@ -101,54 +95,51 @@ handleMain (VtyEvent ev) = case ev of
   EvKey (KChar 'd') [MCtrl] -> openPrompt makeDeletePrompt
   EvKey (KChar 'o') [MCtrl] -> openTabDir True
   EvKey (KChar 's') [MCtrl] -> openPrompt makeSearchPrompt
-  EvKey (KChar 'k') [] -> updateZipper removeTab
   EvKey (KChar 's') [] -> openPrompt makeDisplayInfoPrompt
   EvKey (KChar 'm') [] -> openPrompt makeMkdirPrompt
   EvKey (KChar 't') [] -> openPrompt makeTouchPrompt
   EvKey (KChar 'g') [] -> openPrompt makeGoToPrompt
-  EvKey (KChar 'e') [] -> updateZipper (insert makeEmptyTab)
-  EvKey (KChar 'r') [] -> updateZipperEv reloadCurrentTab
-  EvKey (KChar '\t') [] -> updateZipper next
-  EvKey KBackTab [] -> updateZipper previous
-  EvKey KLeft [MCtrl] -> updateZipper swapWithPrevious
-  EvKey KRight [MCtrl] -> updateZipper swapWithNext
   EvKey KEnter [] -> openTabEntry
-  _ -> updateZipperEv (updateCurrentTab ev)
+  EvKey (KChar 'e') [MCtrl] -> addPane
+  EvKey (KChar 'k') [MCtrl] -> closePane
+  EvKey KLeft [] -> previousPane
+  EvKey KRight [] -> nextPane
+  _ -> updateCurrentPane (handlePaneEvent ev)
 handleMain (MouseUp name _ (Location pos)) = case name of
-  EList -> updateZipper (moveTabToRow $ snd pos)
-  (LNum n) -> updateZipper (moveToNth n)
-  (BVal c b) -> handleMain . VtyEvent $ EvKey (KChar c) [MCtrl | b]
+  EntryList {pnName = pName} -> updateCurrentPane (moveTabToRow $ snd pos) . focusOnPane pName
+  Label {pnName = pName, labelNum = n} -> updateCurrentPane (updateTabZipper (moveToNth n)) . focusOnPane pName
+  Button {charBind = c, withCtrl = b} -> handleMain . VtyEvent $ EvKey (KChar c) [MCtrl | b]
   _ -> continue
 handleMain _ = continue
 
 -- state-changing functions
-updateZipper :: (TabZipper -> TabZipper) -> State -> EventM Name (Next State)
-updateZipper f st = continue $ st {tabZipper=f $ tabZipper st, prompt=Nothing}
+updateCurrentPane :: (Pane -> EventM Name Pane) -> State -> EventM Name (Next State)
+updateCurrentPane func state = do
+  newPane <- func $ currentPane state
+  continue $ state {paneZipper = replace newPane $ paneZipper state, prompt = Nothing}
 
 updateClipboard :: (Entry -> Clipboard) -> State -> EventM Name (Next State)
-updateClipboard f st = continue $ case selectedEntry . current $ tabZipper st of
-  (Just entry) -> st {clipboard=f entry, prompt=Nothing}
-  _ -> st {prompt=Nothing}
+updateClipboard f st = continue $ case selectedEntry . currentTab $ currentPane st of
+  (Just entry) -> st {clipboard=f entry}
+  _ -> st
 
 updatePrompt :: Prompt -> State -> EventM Name (Next State)
 updatePrompt pr st = continue $ st {prompt=Just pr}
 
-openPrompt :: (Tab -> Prompt) -> State -> EventM Name (Next State)
-openPrompt f st = continue $ st {prompt=Just . f . current $ tabZipper st}
+openPrompt :: (Tab -> PaneName -> Prompt) -> State -> EventM Name (Next State)
+openPrompt func state = continue $ state {prompt = Just $ func tab pName}
+  where
+    tab = currentTab $ currentPane state
+    pName = paneName $ currentPane state
 
-openPromptWithClip :: (Clipboard -> Tab -> Prompt) -> State -> EventM Name (Next State)
-openPromptWithClip f st = continue $ st {prompt=Just . f (clipboard st) . current $ tabZipper st}
-
-updateZipperEv :: (Tab -> EventM Name (TabZipper -> TabZipper)) -> State -> EventM Name (Next State)
-updateZipperEv inputFunc s = do
-  func <- inputFunc . current $ tabZipper s
-  updateZipper func s
+openPromptWithClip :: (Clipboard -> Tab -> PaneName -> Prompt) -> State -> EventM Name (Next State)
+openPromptWithClip func state = openPrompt (func $ clipboard state) state
 
 openTabEntry :: State -> EventM Name (Next State)
-openTabEntry s = case selectedEntry . current $ tabZipper s of
-  Just DirEntry {} -> openTabDir False s
-  Just (FileEntry n p i) -> openTabFile (FileEntry n p i) s
-  _ -> continue s
+openTabEntry state = case selectedEntry . currentTab $ currentPane state of
+  Just DirEntry {} -> openTabDir False state
+  Just (FileEntry n p i) -> openTabFile (FileEntry n p i) state
+  _ -> continue state
 
 openTabFile :: Entry -> State -> EventM Name (Next State)
 openTabFile fileEntry
@@ -168,48 +159,30 @@ runExternal com s = do
   return s
 
 openTabDir :: Bool -> State -> EventM Name (Next State)
-openTabDir inNew = updateZipperEv (openSelectedDir inNew)
+openTabDir inNew = updateCurrentPane (openSelectedDir inNew)
 
-openSelectedDir :: Bool -> Tab -> EventM Name (TabZipper -> TabZipper)
-openSelectedDir inNew tab = case selectedEntry tab of
-  Just DirEntry {entryPath = path} -> (if inNew then insertFixed else replace) <$> liftIO (makeDirTab path)
-  _ -> return id
+addPane :: State -> EventM Name (Next State)
+addPane state = continue $ state {paneZipper = newZipper, lastPaneName = newName}
+  where
+    newName = 1 + lastPaneName state
+    newZipper = insert (makeEmptyPane newName) $ paneZipper state
 
-reloadCurrentTab :: Tab -> EventM Name (TabZipper -> TabZipper)
-reloadCurrentTab tab = replace <$> liftIO (reload tab)
+closePane :: State -> EventM Name (Next State)
+closePane state = continue $ case delete $ paneZipper state of
+  Just newZipper -> state {paneZipper = newZipper}
+  _ -> state
 
-updateCurrentTab :: Event -> Tab -> EventM Name (TabZipper -> TabZipper)
-updateCurrentTab ev tab = replace <$> handleTabEvent ev tab
+nextPane :: State -> EventM Name (Next State)
+nextPane state = continue $ state {paneZipper = next $ paneZipper state}
 
--- tab and tabZipper utility functions
-moveTabToRow :: Int -> TabZipper -> TabZipper
-moveTabToRow row zipper = replace (moveToRow row $ current zipper) zipper
+previousPane :: State -> EventM Name (Next State)
+previousPane state = continue $ state {paneZipper = previous $ paneZipper state}
 
-current :: TabZipper -> Tab
-current = _focus
+-- pane and paneZipper utility functions
+currentPane :: State -> Pane
+currentPane = _focus . paneZipper
 
-removeTab :: TabZipper -> TabZipper
-removeTab zipper = case delete zipper of
-  Just newZipper -> newZipper
-  _ -> singleton makeEmptyTab
-
-moveToNth :: Int -> TabZipper -> TabZipper
-moveToNth n zipper = case moveTo n zipper of
-  Just newZipper -> newZipper
-  _ -> zipper
-
-insertFixed :: Tab -> TabZipper -> TabZipper
-insertFixed tab = previous . insert tab
-
-swapWithPrevious :: TabZipper -> TabZipper
-swapWithPrevious zipper
-  | atStart zipper && atEnd zipper = zipper
-  | atStart zipper = insert (current zipper) . previous $ removeTab zipper
-  | atEnd zipper = insertLeft (current zipper) $ removeTab zipper
-  | otherwise = insertLeft (current zipper) . previous $ removeTab zipper
-
-swapWithNext :: TabZipper -> TabZipper
-swapWithNext zipper
-  | atStart zipper && atEnd zipper = zipper
-  | atEnd zipper = insertLeft (current zipper) . next $ removeTab zipper
-  | otherwise = insert (current zipper) $ removeTab zipper
+focusOnPane :: PaneName -> State -> State
+focusOnPane pName state = case find (makeEmptyPane pName) $ paneZipper state of
+  Just newZipper -> state {paneZipper = newZipper}
+  _ -> state

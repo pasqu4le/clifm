@@ -58,41 +58,41 @@ instance Show OrderType where
 makeEmptyTab :: Tab
 makeEmptyTab = EmptyTab
 
-makeDirTab :: FilePath -> IO Tab
-makeDirTab path = do
+makeDirTab :: PaneName -> FilePath -> IO Tab
+makeDirTab pName path = do
   isFile <- doesFileExist path
   isDir <- doesDirectoryExist path
   if isDir && not isFile then do
     let fName = takeFileName path
         order = EntryOrder FileName False
-    entryLst <- makeTabEntryList order path
+    entryLst <- makeDirEntryList pName order path
     return $ DirTab (if null fName then "-root-" else fName) path entryLst order
   else return makeEmptyTab
 
-makeTabEntryList :: EntryOrder -> FilePath -> IO (List Name Entry)
-makeTabEntryList order dir = do
+makeDirEntryList :: PaneName -> EntryOrder -> FilePath -> IO (List Name Entry)
+makeDirEntryList pName order dir = do
   sub <- listDirectory dir
   entries <- mapM (makeEntry . (dir </>)) sub
   let upPath = takeDirectory dir
   upDir <- DirEntry ".." upPath <$> makeEntryInfo upPath
-  return $ list EList (Vect.fromList . (upDir :) $ sortEntries order entries) 1
+  return $ list EntryList {pnName = pName} (Vect.fromList . (upDir :) $ sortEntries order entries) 1
 
-makeSearchTab :: FilePath -> String -> IO Tab
-makeSearchTab path query = do
+makeSearchTab :: PaneName -> FilePath -> String -> IO Tab
+makeSearchTab pName path query = do
   isFile <- doesFileExist path
   isDir <- doesDirectoryExist path
   if isDir && not isFile then do
     let order = EntryOrder FileName False
-    entryLst <- makeSearchEntryList order path query
+    entryLst <- makeSearchEntryList pName order path query
     return $ SearchTab query path query entryLst order
   else return makeEmptyTab
 
-makeSearchEntryList :: EntryOrder -> FilePath -> String -> IO (List Name Entry)
-makeSearchEntryList order dir query = do
+makeSearchEntryList :: PaneName -> EntryOrder -> FilePath -> String -> IO (List Name Entry)
+makeSearchEntryList pName order dir query = do
   searchResult <- searchRecursive dir query
   entries <- mapM makeEntry searchResult
   searchDir <- DirEntry "." dir <$> makeEntryInfo dir
-  return $ list EList (Vect.fromList . (searchDir :) $ sortEntries order entries) 1
+  return $ list EntryList {pnName = pName} (Vect.fromList . (searchDir :) $ sortEntries order entries) 1
 
 makeEntry :: FilePath -> IO Entry
 makeEntry path = do
@@ -143,8 +143,8 @@ renderPath tab = str $ case tab of
   DirTab {tabPath = path} -> " " ++ path ++ " "
   SearchTab {tabPath = p, tabQuery = q} -> " search for " ++ q ++ " in " ++ takeFileName p
 
-renderContent :: Tab -> Widget Name
-renderContent EmptyTab = vBox (lns ++ [fill ' '])
+renderContent :: Bool -> Tab -> Widget Name
+renderContent _ EmptyTab = vBox (lns ++ [fill ' '])
   where lns = map strWrap $ lines "Command Line Interface File Manager\n \n\
     \clifm allows you to explore directories on multiple tabs.\nIf your terminal\
     \ has mouse support you can click on some elements to interact with them, \
@@ -155,7 +155,7 @@ renderContent EmptyTab = vBox (lns ++ [fill ' '])
     \BackTab key or use Ctrl + Left or Right arrow key to swap them.\n \nYou can \
     \see every other possible action as a button in the bottom, or you can use \
     \them as Keys combination.\n \nTo see them all please refer to the README"
-renderContent tab = renderList renderEntry True $ entryList tab
+renderContent hasFocus tab = renderList renderEntry hasFocus $ entryList tab
 
 renderEntry :: Bool -> Entry -> Widget Name
 renderEntry _ en = let info = entryInfo en in vLimit 1 $ hBox [
@@ -246,11 +246,11 @@ invertOrder tab = tab {entryOrder = newOrder, entryList = newEntryList}
     reversed = Vect.cons (Vect.head entries) . Vect.reverse $ Vect.tail entries
     newEntryList = listReplace reversed newIndex eLst
 
-reload :: Tab -> IO Tab
-reload tab = case tab of
+reload :: PaneName -> Tab -> IO Tab
+reload pName tab = case tab of
   EmptyTab -> return EmptyTab
-  DirTab {tabPath=p, entryOrder=o} -> keepSelection tab <$> makeTabEntryList o p
-  SearchTab {tabPath=p, entryOrder=o, tabQuery=q} -> keepSelection tab <$> makeSearchEntryList o p q
+  DirTab {tabPath=p, entryOrder=o} -> keepSelection tab <$> makeDirEntryList pName o p
+  SearchTab {tabPath=p, entryOrder=o, tabQuery=q} -> keepSelection tab <$> makeSearchEntryList pName o p q
 
 keepSelection :: Tab -> List Name Entry -> Tab
 keepSelection tab newList = tab {entryList = listMoveTo index newList}

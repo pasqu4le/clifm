@@ -7,7 +7,7 @@ import Data.Monoid ((<>))
 import Data.Functor (($>))
 import Control.Monad(when,forM_)
 import Control.Monad.IO.Class (liftIO)
-import Control.Concurrent (threadDelay, forkFinally, ThreadId, killThread)
+import Control.Concurrent (forkFinally, ThreadId, killThread)
 import Control.Exception (try, throw, displayException, SomeException, fromException)
 import Control.Exception.Base (AsyncException(ThreadKilled))
 import Control.Applicative ((*>), (<$>))
@@ -24,7 +24,7 @@ import System.Directory (doesFileExist, doesDirectoryExist, createDirectory, ren
   copyFileWithMetadata, renameFile, removeFile, removeDirectoryRecursive, getDirectoryContents,
   readable, writable, executable, searchable)
 
-data Prompt = Prompt {originTab :: Tab, action :: PromptAction} deriving Show
+data Prompt = Prompt {originTab :: Tab, originPane :: PaneName, action :: PromptAction} deriving Show
 type PathEditor = Editor FilePath Name
 data PromptAction = Copy Entry FilePath | Cut Entry FilePath | Rename PathEditor Entry |
   Delete Entry | Mkdir PathEditor FilePath | Touch PathEditor FilePath |
@@ -49,45 +49,45 @@ emptyPathEditor :: PathEditor
 emptyPathEditor = makePathEditor []
 
 makePathEditor :: FilePath -> PathEditor
-makePathEditor = editor PEdit (Just 1)
+makePathEditor = editor PromptEditor (Just 1)
 
-makePastePrompt :: Clipboard -> Tab -> Prompt
-makePastePrompt c tab = Prompt tab $ case (c, tab) of
+makePastePrompt :: Clipboard -> Tab -> PaneName -> Prompt
+makePastePrompt c tab pName = Prompt tab pName $ case (c, tab) of
   (EmptyBoard, _) -> DisplayError "The clipboard is empty"
   (_, EmptyTab) -> DisplayError "You cannot paste into an empty tab"
   (_, SearchTab {}) -> DisplayError "You cannot paste into a search tab"
   (CopyBoard {fromEntry = entry}, DirTab{tabPath = path}) -> Copy entry path
   (CutBoard {fromEntry = entry}, DirTab{tabPath = path}) -> Cut entry path
 
-makeGoToPrompt :: Tab -> Prompt
-makeGoToPrompt tab = Prompt tab $ GoTo emptyPathEditor
+makeGoToPrompt :: Tab -> PaneName -> Prompt
+makeGoToPrompt tab pName = Prompt tab pName $ GoTo emptyPathEditor
 
-makeRenamePrompt :: Tab -> Prompt
+makeRenamePrompt :: Tab -> PaneName -> Prompt
 makeRenamePrompt = withSelectedEntry (\en -> Rename (editorFromEntry en) en)
   where editorFromEntry = makePathEditor . takeFileName . entryPath
 
-makeDeletePrompt :: Tab -> Prompt
+makeDeletePrompt :: Tab -> PaneName -> Prompt
 makeDeletePrompt = withSelectedEntry Delete
 
-makeMkdirPrompt :: Tab -> Prompt
+makeMkdirPrompt :: Tab -> PaneName -> Prompt
 makeMkdirPrompt = withDirTabPath (Mkdir emptyPathEditor)
 
-makeTouchPrompt :: Tab -> Prompt
+makeTouchPrompt :: Tab -> PaneName -> Prompt
 makeTouchPrompt = withDirTabPath (Touch emptyPathEditor)
 
-makeDisplayInfoPrompt :: Tab -> Prompt
+makeDisplayInfoPrompt :: Tab -> PaneName -> Prompt
 makeDisplayInfoPrompt = withSelectedEntry (DisplayInfo . entryInfo)
 
-makeSearchPrompt :: Tab -> Prompt
+makeSearchPrompt :: Tab -> PaneName -> Prompt
 makeSearchPrompt = withDirTabPath (Search emptyPathEditor)
 
-withSelectedEntry :: (Entry -> PromptAction) -> Tab -> Prompt
-withSelectedEntry func tab = Prompt tab $ case selectedEntry tab of
+withSelectedEntry :: (Entry -> PromptAction) -> Tab -> PaneName -> Prompt
+withSelectedEntry func tab pName = Prompt tab pName $ case selectedEntry tab of
   Just entry -> func entry
   _ -> DisplayError "This tab does not have a selected entry"
 
-withDirTabPath :: (FilePath -> PromptAction) -> Tab -> Prompt
-withDirTabPath func tab = Prompt tab $ case tab of
+withDirTabPath :: (FilePath -> PromptAction) -> Tab -> PaneName -> Prompt
+withDirTabPath func tab pName = Prompt tab pName $ case tab of
    DirTab {tabPath = path} -> func path
    _ -> DisplayError "This tab does not represent a directory"
 
@@ -176,7 +176,7 @@ handlePromptEvent (AppEvent ev) pr _ = case ev of
 handlePromptEvent (VtyEvent ev) pr eChan = case ev of
   EvKey KEsc [] -> liftIO $ exitPrompt pr
   EvKey KEnter [] -> liftIO $ performAction pr eChan
-  _ -> Left . Prompt (originTab pr) <$> handleActionEditor ev (action pr)
+  _ -> Left . Prompt (originTab pr) (originPane pr) <$> handleActionEditor ev (action pr)
 handlePromptEvent _ pr _ = return $ Left pr
 
 exitPrompt :: Prompt -> IO (Either Prompt Tab)
@@ -214,32 +214,32 @@ tryProcessAction :: Prompt -> IO (Either Prompt Tab)
 tryProcessAction pr = do
   result <- (try $ processAction pr) :: IO (Either SomeException Tab)
   return $ case result of
-    Left e -> Left . Prompt (originTab pr) . DisplayError $ displayException e
+    Left e -> Left $ pr {action = DisplayError $ displayException e}
     Right tabRes -> Right tabRes
 
 processAction :: Prompt -> IO Tab
-processAction Prompt {originTab = tab, action = act} = case act of
-  Copy FileEntry {entryPath = ePath} path -> copyFileWithMetadata ePath (path </> takeFileName ePath) *> reload tab
-  Copy DirEntry {entryPath = ePath} path -> copyDirectoryRecursive ePath (path </> takeFileName ePath) *> reload tab
-  Cut FileEntry {entryPath = ePath} path -> moveFileWithMetadata ePath (path </> takeFileName ePath) *> reload tab
-  Cut DirEntry {entryPath = ePath} path -> moveDirectoryRecursive ePath (path </> takeFileName ePath) *> reload tab
-  Rename edit FileEntry {entryPath = ePath} -> renameFile ePath (takeDirectory ePath </> getEditLine edit) *> reload tab
-  Rename edit DirEntry {entryPath = ePath} -> moveDirectoryRecursive ePath (takeDirectory ePath </> getEditLine edit) *> reload tab
-  Delete FileEntry {entryPath = ePath} -> removeFile ePath *> reload tab
-  Delete DirEntry {entryPath = ePath} -> removeDirectoryRecursive ePath *> reload tab
-  Mkdir edit path -> createDirectory (path </> getEditLine edit) *> reload tab
-  Touch edit path -> writeFile (path </> getEditLine edit) "" *> reload tab
-  GoTo edit -> processGoTo $ getEditLine edit
-  Search edit path -> makeSearchTab path $ getEditLine edit
+processAction Prompt {originTab = tab, originPane = pName, action = act} = case act of
+  Copy FileEntry {entryPath = ePath} path -> copyFileWithMetadata ePath (path </> takeFileName ePath) *> reload pName tab
+  Copy DirEntry {entryPath = ePath} path -> copyDirectoryRecursive ePath (path </> takeFileName ePath) *> reload pName tab
+  Cut FileEntry {entryPath = ePath} path -> moveFileWithMetadata ePath (path </> takeFileName ePath) *> reload pName tab
+  Cut DirEntry {entryPath = ePath} path -> moveDirectoryRecursive ePath (path </> takeFileName ePath) *> reload pName tab
+  Rename edit FileEntry {entryPath = ePath} -> renameFile ePath (takeDirectory ePath </> getEditLine edit) *> reload pName tab
+  Rename edit DirEntry {entryPath = ePath} -> moveDirectoryRecursive ePath (takeDirectory ePath </> getEditLine edit) *> reload pName tab
+  Delete FileEntry {entryPath = ePath} -> removeFile ePath *> reload pName tab
+  Delete DirEntry {entryPath = ePath} -> removeDirectoryRecursive ePath *> reload pName tab
+  Mkdir edit path -> createDirectory (path </> getEditLine edit) *> reload pName tab
+  Touch edit path -> writeFile (path </> getEditLine edit) "" *> reload pName tab
+  GoTo edit -> processGoTo pName $ getEditLine edit
+  Search edit path -> makeSearchTab pName path $ getEditLine edit
   _ -> return tab
 
-processGoTo :: FilePath -> IO Tab
-processGoTo path = do
+processGoTo :: PaneName -> FilePath -> IO Tab
+processGoTo pName path = do
   isFile <- doesFileExist path
   isDir <- doesDirectoryExist path
   if isFile || not isDir
     then throw . userError $ path <> " does not exist or is not a directory"
-    else makeDirTab path
+    else makeDirTab pName path
 
 handleActionEditor :: Event -> PromptAction -> EventM Name PromptAction
 handleActionEditor ev act = case act of
