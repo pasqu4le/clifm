@@ -1,16 +1,24 @@
 # Command Line Interface File Manager
-Clifm is a small file manager written in Haskell with a command line interface. It allows you to explore directories in multiple Panes/Tabs and perform basic operations.
+Clifm is a small file manager written in Haskell with a terminal-based interface. It allows you to explore directories in multiple Panes/Tabs and perform basic operations.
 
 ![screenshot](screenshot.png)
 
-> Note: this is still an experiment. Directory navigation will do no harm, but think twice before starting operations on your file system. I take no responsibility for what you do with this software.
+> Note: this is still an experiment. Directory navigation will do no harm, but double-check before starting operations on your file system. I take no responsibility for what you do with this software.
 
-## Building and Running
-To install clifm, you need [GHC](https://www.haskell.org/ghc/) and [cabal-install](http://hackage.haskell.org/package/cabal-install).
+## Installation
+For ArchLinux the binary from [the latest github release](https://github.com/pasqu4le/clifm/releases/latest) should work.
+For other Linux distro the binary may work as well, or you can build from source.
 
-From the downloaded source code directory you can then use:
+To build from source you will need [GHC](https://www.haskell.org/ghc/) and [cabal-install](http://hackage.haskell.org/package/cabal-install).
+Since clifm is on Hackage you can just use:
 
 ```
+$ cabal install clifm
+```
+or install from the cloned repository:
+```
+$ git clone https://github.com/pasqu4le/clifm.git
+$ cd clifm
 $ cabal install
 ```
 
