@@ -8,6 +8,8 @@ import qualified Widgets.Prompt as Prompt
 
 import System.Process (callCommand)
 import Control.Exception (try, SomeException)
+import Control.Monad.IO.Class (liftIO)
+import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import Brick.Main (continue, halt, suspendAndResume)
 import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, withBorderStyle)
 import Brick.Types (Widget, BrickEvent(..), EventM, Next, ViewportType(..), Location(..))
@@ -24,6 +26,7 @@ data State = State {paneZipper :: PaneZipper,
     lastPaneName :: PaneName,
     bottomMenu :: Menu.Menu,
     prompt :: Maybe Prompt.Prompt,
+    lastClickedEntry :: Maybe (PaneName, Int, UTCTime),
     editorCommand :: String,
     eventChan :: BChan (ThreadEvent Tab.Tab)
   }
@@ -33,7 +36,7 @@ type PaneZipper = PointedList Pane.Pane
 makeState :: FilePath -> String -> BChan (ThreadEvent Tab.Tab) -> IO State
 makeState path editCom eChan = do
   pane <- Pane.make 0 path
-  return $ State (singleton pane) 0 Menu.make Nothing editCom eChan
+  return $ State (singleton pane) 0 Menu.make Nothing Nothing editCom eChan
 
 -- rendering functions
 drawUi :: State -> [Widget Name]
@@ -90,8 +93,8 @@ handleMain (VtyEvent ev) = case ev of
   EvKey KRight [] -> nextPane
   _ -> updateCurrentPane (Pane.handleEvent ev)
 handleMain (MouseUp name _ (Location pos)) = case name of
-  EntryList {pnName = pName} -> updateCurrentPane (Pane.moveTabToRow $ snd pos) . focusOnPane pName
-  Label {pnName = pName, labelNum = n} -> updateCurrentPane (Pane.updateTabZipper (Pane.moveToNth n)) . focusOnPane pName
+  EntryList {pnName = pName} -> clickedEntry pName (snd pos)
+  Label {pnName = pName, labelNum = n} -> updateCurrentPane (Pane.moveToNthTab n) . focusOnPane pName
   Button {keyBind = key, withCtrl = b} -> handleMain . VtyEvent $ EvKey key [MCtrl | b]
   _ -> continue
 handleMain _ = continue
@@ -121,6 +124,20 @@ openPrompt func state = continue $ state {prompt = Just $ func tab pName}
 
 openPromptWithClip :: (Menu.Clipboard -> Tab.Tab -> PaneName -> Prompt.Prompt) -> State -> EventM Name (Next State)
 openPromptWithClip func state = openPrompt (func . Menu.clipboard $ bottomMenu state) state
+
+clickedEntry :: PaneName -> Int -> State -> EventM Name (Next State)
+clickedEntry pName row state = do
+  currTime <- liftIO $ getCurrentTime
+  let clicked = (pName, row, currTime)
+      doubleClick = isDoubleClick (lastClickedEntry state) clicked
+  if doubleClick then openEntry $ state {lastClickedEntry = Nothing}
+  else updateCurrentPane (Pane.moveTabToRow row) . focusOnPane pName $ state {lastClickedEntry = Just clicked}
+
+isDoubleClick :: Maybe (PaneName, Int, UTCTime) -> (PaneName, Int, UTCTime) -> Bool
+isDoubleClick lastClick (nPane, nRow, nTime) = case lastClick of
+  Nothing -> False
+  Just (pPane, pRow, pTime) -> and [pPane == nPane, pRow == nRow, isSmallDiff]
+    where isSmallDiff = toRational (diffUTCTime nTime pTime) <= toRational 0.2
 
 openEntry :: State -> EventM Name (Next State)
 openEntry state = case Pane.selectedEntry $ currentPane state of

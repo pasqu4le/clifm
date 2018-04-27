@@ -75,6 +75,9 @@ openDirEntry inNew pane = case selectedEntry pane of
 replaceCurrentTab :: Tab.Tab -> Pane -> EventM Name Pane
 replaceCurrentTab tab = updateTabZipper (replace tab)
 
+moveToNthTab :: Int -> Pane -> EventM Name Pane
+moveToNthTab n = updateTabZipper (moveToNth n)
+
 -- tab and tabZipper utility functions
 selectedEntry :: Pane -> Maybe Entry.Entry
 selectedEntry = Tab.selectedEntry . currentTab

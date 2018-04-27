@@ -6,6 +6,8 @@ Clifm is a small file manager written in Haskell with a terminal-based interface
 > Note: this is still an experiment. Directory navigation will do no harm, but double-check before starting operations on your file system. I take no responsibility for what you do with this software.
 
 ## Installation
+> Note: You may need to install `ncurses` on your system before using clifm
+
 For ArchLinux the binary from [the latest github release](https://github.com/pasqu4le/clifm/releases/latest) should work.
 For other Linux distro the binary may work as well, or you can build from source.
 
@@ -25,7 +27,7 @@ $ cabal install
 ## Features
 Clifm is a [brick](https://github.com/jtdaugherty/brick) application, that in turn builds upon [vty](https://github.com/jtdaugherty/vty). As such it supports a large number of terminals, but not on Windows, handles windows resizing and more.
 
-If your terminal supports a mouse you can use it to change Tab/Pane, click a button on the bottom or change your selection, but only using the keyboard you can perform every possible action. This is the list of all the keybindings:
+If your terminal supports a mouse you can use it to change Tab/Pane, click a button on the bottom, change your selection or open it (double-click), but only using the keyboard you can perform every possible action. This is the list of all the keybindings:
 
 #### Bottom menu
 - L: open Se**l**ection menu
