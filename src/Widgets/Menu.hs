@@ -12,7 +12,7 @@ import Brick.Widgets.Border (borderWithLabel, border)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 
 data Menu = Menu {clipboard :: Clipboard, menuType :: MenuType}
-data MenuType = MainMenu | SelectionMenu | TabMenu | PaneMenu
+data MenuType = Main | Selection | Tab | Pane
 data Clipboard = CopyBoard {fromEntry :: Entry.Entry} | CutBoard {fromEntry :: Entry.Entry} | EmptyBoard
 
 instance Show Clipboard where
@@ -21,7 +21,7 @@ instance Show Clipboard where
 
 -- creation functions
 make :: Menu
-make = Menu {clipboard = EmptyBoard, menuType = MainMenu}
+make = Menu {clipboard = EmptyBoard, menuType = Main}
 
 makeCopyBoard :: Entry.Entry -> Clipboard
 makeCopyBoard = CopyBoard
@@ -35,10 +35,10 @@ render m = hBox . (renderClipboard (clipboard m) :) . renderButtons (menuType m)
 
 renderButtons :: MenuType -> Pane.Pane -> [Widget Name]
 renderButtons tp pane = map renderButton $ case tp of
-  MainMenu -> mainButtons
-  SelectionMenu -> (backButton :) . selectionButtons $ Pane.selectedEntry pane
-  TabMenu -> (backButton :) . tabButtons $ Pane.currentTab pane
-  PaneMenu -> backButton : paneButtons
+  Main -> mainButtons
+  Selection -> (backButton :) . selectionButtons $ Pane.selectedEntry pane
+  Tab -> (backButton :) . tabButtons $ Pane.currentTab pane
+  Pane -> backButton : paneButtons
 
 renderButton :: (Widget Name, Maybe String, Name) -> Widget Name
 renderButton (bContent, bLabel, bName) = clickable bName $ case bLabel of

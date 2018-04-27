@@ -67,10 +67,10 @@ handlePrompt ev pr state = do
 handleMain :: BrickEvent Name (ThreadEvent Tab.Tab) -> State -> EventM Name (Next State)
 handleMain (VtyEvent ev) = case ev of
   EvKey KEsc [] -> halt
-  EvKey KBS [] -> updateMenu Menu.MainMenu
-  EvKey (KChar 'l') [] -> updateMenu Menu.SelectionMenu
-  EvKey (KChar 'a') [] -> updateMenu Menu.TabMenu
-  EvKey (KChar 'p') [] -> updateMenu Menu.PaneMenu
+  EvKey KBS [] -> updateMenu Menu.Main
+  EvKey (KChar 'l') [] -> updateMenu Menu.Selection
+  EvKey (KChar 'a') [] -> updateMenu Menu.Tab
+  EvKey (KChar 'p') [] -> updateMenu Menu.Pane
   EvKey (KChar 'q') [] -> halt
   EvKey (KChar 'x') [MCtrl] -> updateClipboard Menu.makeCutBoard
   EvKey (KChar 'c') [MCtrl] -> updateClipboard Menu.makeCopyBoard
