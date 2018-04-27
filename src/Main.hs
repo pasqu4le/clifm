@@ -1,7 +1,7 @@
 module Main where
-import Types
-import Widgets.Manager
-import Widgets.Tab (Tab)
+import Commons
+import qualified Widgets.Manager as Mngr
+import qualified Widgets.Tab as Tab
 
 import Options.Applicative
 import System.Directory (doesDirectoryExist, doesFileExist, makeAbsolute)
@@ -69,13 +69,14 @@ runUI options = do
         setMode (outputIface v) Mouse True
         return v
   eventChan <- Brick.BChan.newBChan 10
-  state <- makeState path (editComm options) eventChan
+  state <- Mngr.makeState path (editComm options) eventChan
   void $ customMain buildVty (Just eventChan) (app atrm) state
 
-app :: AttrMap -> App State (ThreadEvent Tab) Name
-app atrm = App { appDraw = drawUi,
+app :: AttrMap -> App Mngr.State (ThreadEvent Tab.Tab) Name
+app atrm = App {
+    appDraw = Mngr.drawUi,
     appStartEvent = return,
-    appHandleEvent = handleEvent,
+    appHandleEvent = Mngr.handleEvent,
     appAttrMap = const atrm,
     appChooseCursor = showFirstCursor
   }

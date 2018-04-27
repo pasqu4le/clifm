@@ -1,4 +1,4 @@
-module Types where
+module Commons where
 
 import Data.Monoid ((<>))
 import Brick.Widgets.Core (withDefAttr, str)

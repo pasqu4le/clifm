@@ -1,9 +1,10 @@
 module Widgets.Manager where
-import Types
-import Widgets.Pane
-import Widgets.Tab
-import Widgets.Menu
-import Widgets.Prompt
+import Commons
+import qualified Widgets.Pane as Pane
+import qualified Widgets.Tab as Tab
+import qualified Widgets.Entry as Entry
+import qualified Widgets.Menu as Menu
+import qualified Widgets.Prompt as Prompt
 
 import System.Process (callCommand)
 import Control.Exception (try, SomeException)
@@ -21,116 +22,116 @@ import Data.List.PointedList.Circular (next, previous)
 
 data State = State {paneZipper :: PaneZipper,
     lastPaneName :: PaneName,
-    bottomMenu :: Menu,
-    prompt :: Maybe Prompt,
+    bottomMenu :: Menu.Menu,
+    prompt :: Maybe Prompt.Prompt,
     editorCommand :: String,
-    eventChan :: BChan (ThreadEvent Tab)
+    eventChan :: BChan (ThreadEvent Tab.Tab)
   }
-type PaneZipper = PointedList Pane
+type PaneZipper = PointedList Pane.Pane
 
 -- creation functions
-makeState :: FilePath -> String -> BChan (ThreadEvent Tab) -> IO State
+makeState :: FilePath -> String -> BChan (ThreadEvent Tab.Tab) -> IO State
 makeState path editCom eChan = do
-  pane <- makePane 0 path
-  return $ State (singleton pane) 0 makeMenu Nothing editCom eChan
+  pane <- Pane.make 0 path
+  return $ State (singleton pane) 0 Menu.make Nothing editCom eChan
 
 -- rendering functions
 drawUi :: State -> [Widget Name]
 drawUi state = case prompt state of
-  Just pr -> [renderPrompt pr, renderMainUI state]
+  Just pr -> [Prompt.render pr, renderMainUI state]
   _ -> [renderMainUI state]
 
 renderMainUI :: State -> Widget Name
-renderMainUI state = vBox [panes, botSep, menu]
-  where
-    panes = renderPanes $ paneZipper state
-    botSep = withBorderStyle unicodeBold hBorder
-    menu = vLimit 3 $ renderMenu (bottomMenu state) (currentPane state)
+renderMainUI state = vBox [
+    renderPanes $ paneZipper state,
+    withBorderStyle unicodeBold hBorder,
+    vLimit 3 $ Menu.render (bottomMenu state) (currentPane state)
+  ]
 
 renderPanes :: PaneZipper -> Widget Name
-renderPanes = hBox . intersperse vBorder . map renderPane . toList . withFocus
+renderPanes = hBox . intersperse vBorder . map Pane.render . toList . withFocus
 
 -- event handling functions
-handleEvent :: State -> BrickEvent Name (ThreadEvent Tab) -> EventM Name (Next State)
+handleEvent :: State -> BrickEvent Name (ThreadEvent Tab.Tab) -> EventM Name (Next State)
 handleEvent state event = case prompt state of
   Just pr -> handlePrompt event pr state
   _ -> handleMain event state
 
-handlePrompt :: BrickEvent Name (ThreadEvent Tab) -> Prompt -> State -> EventM Name (Next State)
+handlePrompt :: BrickEvent Name (ThreadEvent Tab.Tab) -> Prompt.Prompt -> State -> EventM Name (Next State)
 handlePrompt ev pr state = do
-  promptRes <- handlePromptEvent ev pr (eventChan state)
+  promptRes <- Prompt.handleEvent ev pr (eventChan state)
   case promptRes of
     Left pr -> updatePrompt pr state --updates the prompt and keeps it up
-    Right tab -> updateCurrentPane (updateTabZipper (replace tab)) state --updates with the resulting tab and closes the prompt
+    Right tab -> updateCurrentPane (Pane.replaceCurrentTab tab) state --updates with the resulting tab and closes the prompt
 
-handleMain :: BrickEvent Name (ThreadEvent Tab) -> State -> EventM Name (Next State)
+handleMain :: BrickEvent Name (ThreadEvent Tab.Tab) -> State -> EventM Name (Next State)
 handleMain (VtyEvent ev) = case ev of
   EvKey KEsc [] -> halt
-  EvKey KBS [] -> updateMenu MainMenu
-  EvKey (KChar 'l') [] -> updateMenu SelectionMenu
-  EvKey (KChar 'a') [] -> updateMenu TabMenu
-  EvKey (KChar 'p') [] -> updateMenu PaneMenu
+  EvKey KBS [] -> updateMenu Menu.MainMenu
+  EvKey (KChar 'l') [] -> updateMenu Menu.SelectionMenu
+  EvKey (KChar 'a') [] -> updateMenu Menu.TabMenu
+  EvKey (KChar 'p') [] -> updateMenu Menu.PaneMenu
   EvKey (KChar 'q') [] -> halt
-  EvKey (KChar 'x') [MCtrl] -> updateClipboard makeCutBoard
-  EvKey (KChar 'c') [MCtrl] -> updateClipboard makeCopyBoard
-  EvKey (KChar 'v') [MCtrl] -> openPromptWithClip makePastePrompt
-  EvKey (KChar 'r') [MCtrl] -> openPrompt makeRenamePrompt
-  EvKey (KChar 'd') [MCtrl] -> openPrompt makeDeletePrompt
-  EvKey (KChar 'o') [MCtrl] -> openTabDir True
-  EvKey (KChar 's') [MCtrl] -> openPrompt makeSearchPrompt
-  EvKey (KChar 's') [] -> openPrompt makeDisplayInfoPrompt
-  EvKey (KChar 'm') [] -> openPrompt makeMkdirPrompt
-  EvKey (KChar 't') [] -> openPrompt makeTouchPrompt
-  EvKey (KChar 'g') [] -> openPrompt makeGoToPrompt
-  EvKey KEnter [] -> openTabEntry
+  EvKey (KChar 'x') [MCtrl] -> updateClipboard Menu.makeCutBoard
+  EvKey (KChar 'c') [MCtrl] -> updateClipboard Menu.makeCopyBoard
+  EvKey (KChar 'v') [MCtrl] -> openPromptWithClip Prompt.paste
+  EvKey (KChar 'r') [MCtrl] -> openPrompt Prompt.rename
+  EvKey (KChar 'd') [MCtrl] -> openPrompt Prompt.delete
+  EvKey (KChar 'o') [MCtrl] -> openDirEntry True
+  EvKey (KChar 's') [MCtrl] -> openPrompt Prompt.search
+  EvKey (KChar 's') [] -> openPrompt Prompt.displayInfo
+  EvKey (KChar 'm') [] -> openPrompt Prompt.mkdir
+  EvKey (KChar 't') [] -> openPrompt Prompt.touch
+  EvKey (KChar 'g') [] -> openPrompt Prompt.goTo
+  EvKey KEnter [] -> openEntry
   EvKey (KChar 'e') [MCtrl] -> addPane
   EvKey (KChar 'k') [MCtrl] -> closePane
   EvKey KLeft [] -> previousPane
   EvKey KRight [] -> nextPane
-  _ -> updateCurrentPane (handlePaneEvent ev)
+  _ -> updateCurrentPane (Pane.handleEvent ev)
 handleMain (MouseUp name _ (Location pos)) = case name of
-  EntryList {pnName = pName} -> updateCurrentPane (moveTabToRow $ snd pos) . focusOnPane pName
-  Label {pnName = pName, labelNum = n} -> updateCurrentPane (updateTabZipper (moveToNth n)) . focusOnPane pName
+  EntryList {pnName = pName} -> updateCurrentPane (Pane.moveTabToRow $ snd pos) . focusOnPane pName
+  Label {pnName = pName, labelNum = n} -> updateCurrentPane (Pane.updateTabZipper (Pane.moveToNth n)) . focusOnPane pName
   Button {keyBind = key, withCtrl = b} -> handleMain . VtyEvent $ EvKey key [MCtrl | b]
   _ -> continue
 handleMain _ = continue
 
 -- state-changing functions
-updateCurrentPane :: (Pane -> EventM Name Pane) -> State -> EventM Name (Next State)
+updateCurrentPane :: (Pane.Pane -> EventM Name Pane.Pane) -> State -> EventM Name (Next State)
 updateCurrentPane func state = do
   newPane <- func $ currentPane state
   continue $ state {paneZipper = replace newPane $ paneZipper state, prompt = Nothing}
 
-updateMenu :: MenuType -> State -> EventM Name (Next State)
-updateMenu tp st = continue $ st {bottomMenu = changeMenu tp $ bottomMenu st}
+updateMenu :: Menu.MenuType -> State -> EventM Name (Next State)
+updateMenu tp st = continue $ st {bottomMenu = Menu.change tp $ bottomMenu st}
 
-updateClipboard :: (Entry -> Clipboard) -> State -> EventM Name (Next State)
-updateClipboard f st = continue $ case selectedEntry . currentTab $ currentPane st of
-  (Just entry) -> st {bottomMenu = changeClipboard (f entry) $ bottomMenu st}
+updateClipboard :: (Entry.Entry -> Menu.Clipboard) -> State -> EventM Name (Next State)
+updateClipboard f st = continue $ case Pane.selectedEntry $ currentPane st of
+  (Just entry) -> st {bottomMenu = Menu.changeClipboard (f entry) $ bottomMenu st}
   _ -> st
 
-updatePrompt :: Prompt -> State -> EventM Name (Next State)
+updatePrompt :: Prompt.Prompt -> State -> EventM Name (Next State)
 updatePrompt pr st = continue $ st {prompt=Just pr}
 
-openPrompt :: (Tab -> PaneName -> Prompt) -> State -> EventM Name (Next State)
+openPrompt :: (Tab.Tab -> PaneName -> Prompt.Prompt) -> State -> EventM Name (Next State)
 openPrompt func state = continue $ state {prompt = Just $ func tab pName}
   where
-    tab = currentTab $ currentPane state
-    pName = paneName $ currentPane state
+    tab = Pane.currentTab $ currentPane state
+    pName = Pane.name $ currentPane state
 
-openPromptWithClip :: (Clipboard -> Tab -> PaneName -> Prompt) -> State -> EventM Name (Next State)
-openPromptWithClip func state = openPrompt (func . clipboard $ bottomMenu state) state
+openPromptWithClip :: (Menu.Clipboard -> Tab.Tab -> PaneName -> Prompt.Prompt) -> State -> EventM Name (Next State)
+openPromptWithClip func state = openPrompt (func . Menu.clipboard $ bottomMenu state) state
 
-openTabEntry :: State -> EventM Name (Next State)
-openTabEntry state = case selectedEntry . currentTab $ currentPane state of
-  Just DirEntry {} -> openTabDir False state
-  Just (FileEntry n p i) -> openTabFile (FileEntry n p i) state
+openEntry :: State -> EventM Name (Next State)
+openEntry state = case Pane.selectedEntry $ currentPane state of
+  Just Entry.Dir {} -> openDirEntry False state
+  Just (Entry.File n p i) -> openFileEntry (Entry.File n p i) state
   _ -> continue state
 
-openTabFile :: Entry -> State -> EventM Name (Next State)
-openTabFile fileEntry
-  | isExecutable fileEntry = suspendAndResume . runExternal (entryPath fileEntry)
-  | isReadable fileEntry = suspendAndResume . runExternalEditor (entryPath fileEntry)
+openFileEntry :: Entry.Entry -> State -> EventM Name (Next State)
+openFileEntry fileEntry
+  | Entry.isExecutable fileEntry = suspendAndResume . runExternal (Entry.path fileEntry)
+  | Entry.isReadable fileEntry = suspendAndResume . runExternalEditor (Entry.path fileEntry)
   | otherwise = continue
 
 runExternalEditor :: FilePath -> State -> IO State
@@ -144,14 +145,14 @@ runExternal com s = do
   getLine
   return s
 
-openTabDir :: Bool -> State -> EventM Name (Next State)
-openTabDir inNew = updateCurrentPane (openSelectedDir inNew)
+openDirEntry :: Bool -> State -> EventM Name (Next State)
+openDirEntry inNew = updateCurrentPane (Pane.openDirEntry inNew)
 
 addPane :: State -> EventM Name (Next State)
 addPane state = continue $ state {paneZipper = newZipper, lastPaneName = newName}
   where
     newName = 1 + lastPaneName state
-    newZipper = insert (makeEmptyPane newName) $ paneZipper state
+    newZipper = insert (Pane.empty newName) $ paneZipper state
 
 closePane :: State -> EventM Name (Next State)
 closePane state = continue $ case delete $ paneZipper state of
@@ -165,10 +166,10 @@ previousPane :: State -> EventM Name (Next State)
 previousPane state = continue $ state {paneZipper = previous $ paneZipper state}
 
 -- pane and paneZipper utility functions
-currentPane :: State -> Pane
+currentPane :: State -> Pane.Pane
 currentPane = _focus . paneZipper
 
 focusOnPane :: PaneName -> State -> State
-focusOnPane pName state = case find (makeEmptyPane pName) $ paneZipper state of
+focusOnPane pName state = case find (Pane.empty pName) $ paneZipper state of
   Just newZipper -> state {paneZipper = newZipper}
   _ -> state
