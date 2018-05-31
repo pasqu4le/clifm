@@ -68,7 +68,7 @@ If your terminal supports a mouse you can use it to change Tab/Pane, click a but
 
 The actions above will not work only if a prompt is up, or you try to do something not possible.
 
-> NOTE: directory size is not guaranteed to be accurate, the function in the `directory` library seems to be filesystem/platform dependent and visiting a directory tree to sum it's files sizes takes way too much time. Until a better solution is found the directory size will still be shown, but do not trust what it says.
+> NOTE: since version 0.4.1.1 directory size is accurate, calculated by visiting a directory tree to sum it's files sizes (using conduit). In case one of these file's size cannot be read "???" will be displayed. This solution still takes quite some time, during which the app is not responsive, see TODOs.
 
 ## Command line arguments
 You can have a list of command line arguments by running `clifm --help`.
@@ -115,5 +115,4 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 > Attribute names with multiple components (e.g. attr1 <> attr2) can be referenced in customization files by separating the names with a dot. For example, the attribute name "list" <> "selected" can be referenced by using the string "list.selected".
 
 ## TODOs
-- mc directory comparison (need to solve the next point first)
-- find a way to read correctly a directory size in reasonable time
+- find a way to read correctly a directory size without freezing everything

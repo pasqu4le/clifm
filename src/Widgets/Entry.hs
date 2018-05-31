@@ -4,6 +4,7 @@ import Commons
 import Data.Time.Clock (UTCTime)
 import Data.Time.Format (formatTime, defaultTimeLocale)
 import Control.Exception (try, SomeException)
+import Conduit
 import System.FilePath (takeFileName)
 import System.Directory (Permissions, getPermissions, readable, writable, executable, searchable,
   getAccessTime, getModificationTime, doesFileExist, getFileSize)
@@ -13,7 +14,7 @@ import Data.ByteUnits (ByteValue(..), ByteUnit(Bytes), getShortHand, getAppropri
 
 data Entry = Dir {name :: String, path :: FilePath, info :: Info} |
   File {name :: String, path :: FilePath, info :: Info}
-data Info = Info {size :: Integer, perms :: Maybe Permissions, times :: Maybe (UTCTime, UTCTime)} deriving Show
+data Info = Info {size :: Maybe Integer, perms :: Maybe Permissions, times :: Maybe (UTCTime, UTCTime)} deriving Show
 
 instance Show Entry where
   show Dir {name = n} = "+ " ++ n
@@ -28,12 +29,12 @@ instance Eq Entry where
 make :: FilePath -> IO Entry
 make filePath = do
   isFile <- doesFileExist filePath
-  if isFile then File (takeFileName filePath) filePath <$> makeInfo filePath
-  else Dir (takeFileName filePath) filePath <$> makeInfo filePath
+  if isFile then File (takeFileName filePath) filePath <$> makeInfo filePath True
+  else Dir (takeFileName filePath) filePath <$> makeInfo filePath False
 
-makeInfo :: FilePath -> IO Info
-makeInfo filePath = do
-  enSize <- getFileSize filePath
+makeInfo :: FilePath -> Bool -> IO Info
+makeInfo filePath isFile = do
+  enSize <- toMaybe <$> try (if isFile then getFileSize filePath else getDirSize filePath)
   enPerms <- toMaybe <$> try (getPermissions filePath)
   enTimes <- toMaybe <$> try (getEntryTimes filePath)
   return $ Info enSize enPerms enTimes
@@ -85,5 +86,13 @@ hasPermission prop en = case perms $ info en of
   _ -> False
 
 shortSize :: Info -> String
-shortSize enInfo = getShortHand . getAppropriateUnits $ ByteValue enSize Bytes
-  where enSize = fromInteger $ size enInfo
+shortSize enInfo = case size enInfo of
+  Just enSize -> getShortHand . getAppropriateUnits $ ByteValue (fromInteger enSize) Bytes
+  _ -> "???"
+
+-- directory size function
+getDirSize :: FilePath -> IO Integer
+getDirSize filePath = runConduitRes
+  $ sourceDirectoryDeep False filePath
+  .| mapMC (liftIO . getFileSize)
+  .| sumC

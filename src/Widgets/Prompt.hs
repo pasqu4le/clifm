@@ -115,7 +115,10 @@ renderBody pr = vBox $ case action pr of
   Performing name _ -> [str $ "Performing" ++ name, str "Please wait"]
 
 displaySize :: Entry.Info -> String
-displaySize info = "Size: " ++ show (Entry.size info) ++ " Bytes (" ++ Entry.shortSize info ++ ")"
+displaySize info = case Entry.size info of
+  Just s -> "Size: " ++ show s ++ " Bytes (" ++ Entry.shortSize info ++ ")"
+  _ -> "Size unknown (unable to read)"
+
 
 displayPerms :: Entry.Info -> [String]
 displayPerms info = case Entry.perms info of
