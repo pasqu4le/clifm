@@ -16,7 +16,7 @@ import Graphics.Vty (mkVty, standardIOConfig, setMode, outputIface, Mode(Mouse))
 -- entry point: parses the arguments and starts the brick application
 
 -- options
-data FMOptions = FMOptions {dirPath :: FilePath, editComm :: String, themeType :: ThemeType}
+data FMOptions = FMOptions {dirPath :: FilePath, editComm :: String, themeType :: ThemeType, threadNum :: Int}
 data ThemeType = CustomTheme FilePath | DefaultTheme
 
 -- argument parsing functions
@@ -36,6 +36,14 @@ opts = FMOptions
     <> showDefault
     <> value "nano")
   <*> (customTheme <|> defTheme)
+  <*> option auto
+    ( long "thread-num"
+    <> short 'n'
+    <> help "Max number of size-searching threads"
+    <> showDefault
+    <> value 4
+    <> metavar "INT")
+
 
 customTheme :: Parser ThemeType
 customTheme = CustomTheme <$> strOption
@@ -47,7 +55,6 @@ customTheme = CustomTheme <$> strOption
 defTheme :: Parser ThemeType
 defTheme = flag DefaultTheme DefaultTheme
   ( long "default-theme"
-  <> short 'd'
   <> help "Use the default theme" )
 
 main :: IO ()
@@ -69,7 +76,7 @@ runUI options = do
         setMode (outputIface v) Mouse True
         return v
   eventChan <- Brick.BChan.newBChan 10
-  state <- Mngr.makeState path (editComm options) eventChan
+  state <- Mngr.makeState path (editComm options) eventChan (threadNum options)
   void $ customMain buildVty (Just eventChan) (app atrm) state
 
 app :: AttrMap -> App Mngr.State (ThreadEvent Tab.Tab) Name

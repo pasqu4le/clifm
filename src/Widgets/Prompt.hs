@@ -116,9 +116,11 @@ renderBody pr = vBox $ case action pr of
 
 displaySize :: Entry.Info -> String
 displaySize info = case Entry.size info of
-  Just s -> "Size: " ++ show s ++ " Bytes (" ++ Entry.shortSize info ++ ")"
-  _ -> "Size unknown (unable to read)"
-
+  Entry.Known s -> "Size: " ++ show s ++ " Bytes (" ++ Entry.shortSize info ++ ")"
+  Entry.Unknown -> "Size unknown (unable to read)"
+  Entry.Calculating -> "Size is being calculated"
+  Entry.Waiting -> "Size will soon be calculated"
+  _ -> ""
 
 displayPerms :: Entry.Info -> [String]
 displayPerms info = case Entry.perms info of
@@ -172,11 +174,12 @@ renderFooter act = case act of
       _ -> " or "
 
 -- event-handling functions
-handleEvent :: BrickEvent Name (ThreadEvent Tab.Tab) -> Prompt -> BChan (ThreadEvent Tab.Tab) -> EventM Name (Either Prompt Tab.Tab)
+handleEvent :: BrickEvent Name (ThreadEvent Tab.Tab) -> Prompt -> EChan Tab.Tab -> EventM Name (Either Prompt Tab.Tab)
 handleEvent (AppEvent ev) pr _ = case ev of
-  ThreadError err -> return $ Left pr {action = DisplayError err}
-  ThreadSuccess tab -> return $ Right tab
-  ThreadClosed -> return . Right $ originTab pr
+  PromptError err -> return $ Left pr {action = DisplayError err}
+  PromptSuccess tab -> return $ Right tab
+  PromptClosed -> return . Right $ originTab pr
+  _ -> return $ Left pr
 handleEvent (VtyEvent ev) pr eChan = case ev of
   EvKey KEsc [] -> liftIO $ exit pr
   EvKey KEnter [] -> liftIO $ performAction pr eChan
@@ -189,7 +192,7 @@ exit pr = case action pr of
   _ -> return . Right $ originTab pr
 
 -- gets to decide if the action will be processed in a different thread or not
-performAction :: Prompt -> BChan (ThreadEvent Tab.Tab) -> IO (Either Prompt Tab.Tab) --
+performAction :: Prompt -> EChan Tab.Tab -> IO (Either Prompt Tab.Tab) --
 performAction pr eChan = case action pr of
   Copy _ _ -> Left <$> processThreaded pr eChan
   Cut _ _ -> Left <$> processThreaded pr eChan
@@ -199,20 +202,18 @@ performAction pr eChan = case action pr of
   Performing _ _ -> return $ Left pr -- doesn't really make sense
   _ -> processSafe pr
 
-processThreaded :: Prompt -> BChan (ThreadEvent Tab.Tab) -> IO Prompt
+processThreaded :: Prompt -> EChan Tab.Tab -> IO Prompt
 processThreaded pr eChan = do
   tId <- forkFinally (processUnsafe pr) (reportResult eChan)
   return $ pr {action = Performing (show $ action pr) tId}
 
-reportResult :: BChan (ThreadEvent Tab.Tab) -> Either SomeException Tab.Tab -> IO ()
-reportResult eChan res = writeBChan eChan $ case res of
-  Left e -> endingEvent e
-  Right tabRes -> ThreadSuccess tabRes
+reportResult :: EChan Tab.Tab -> Either SomeException Tab.Tab -> IO ()
+reportResult eChan = writeBChan eChan . either endingEvent PromptSuccess
 
 endingEvent :: SomeException -> ThreadEvent Tab.Tab
 endingEvent e = case (fromException e :: Maybe AsyncException) of
-  Just ThreadKilled -> ThreadClosed
-  _ -> ThreadError $ displayException e
+  Just ThreadKilled -> PromptClosed
+  _ -> PromptError $ displayException e
 
 processSafe :: Prompt -> IO (Either Prompt Tab.Tab)
 processSafe pr = do

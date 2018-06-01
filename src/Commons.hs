@@ -7,6 +7,7 @@ import Brick.Themes (Theme, newTheme)
 import Brick.AttrMap (AttrName, AttrMap, attrName, attrMap)
 import Graphics.Vty (Key(..), defAttr, withStyle, underline, black, yellow, white, blue, red)
 import Brick.Util (on, fg, bg)
+import Brick.BChan (BChan)
 import Brick.Widgets.Edit (editFocusedAttr)
 import Brick.Widgets.List (listSelectedFocusedAttr, listSelectedAttr)
 
@@ -16,7 +17,8 @@ data Name = Button {keyBind :: Key, withCtrl :: Bool} |
   Label {pnName :: PaneName, labelNum :: Int} |
   PromptEditor |
   EntryList {pnName :: PaneName} deriving (Ord, Show, Eq)
-data ThreadEvent a = ThreadClosed | ThreadSuccess a | ThreadError String
+type EChan a = BChan (ThreadEvent a) 
+data ThreadEvent a = PromptClosed | PromptSuccess a | PromptError String | SizeFound FilePath Integer | SizeNotFound FilePath
 type PaneName = Int
 
 -- attributes and themes

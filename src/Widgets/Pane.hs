@@ -110,3 +110,9 @@ swapNext zipper
   | atStart zipper && atEnd zipper = zipper
   | atEnd zipper = insertLeft (_focus zipper) . next $ removeTab zipper
   | otherwise = insert (_focus zipper) $ removeTab zipper
+
+notifySize :: FilePath -> Entry.Size -> Pane -> Pane
+notifySize path size pane = pane {tabZipper = Tab.notifySize path size <$> tabZipper pane}
+
+waitingEntries :: Pane -> [Entry.Entry]
+waitingEntries = concatMap Tab.waitingEntries . toList . tabZipper

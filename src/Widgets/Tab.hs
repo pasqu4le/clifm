@@ -58,8 +58,8 @@ makeDirEntryList :: PaneName -> EntryOrder -> FilePath -> IO (List Name Entry.En
 makeDirEntryList pName order dir = do
   sub <- listDirectory dir
   entries <- mapM (Entry.make . (dir </>)) sub
-  upDir <- Entry.make $ takeDirectory dir
-  return $ list EntryList {pnName = pName} (Vect.fromList . (upDir {Entry.name = ".."} :) $ sortEntries order entries) 1
+  upDir <- Entry.makeBackDir $ takeDirectory dir
+  return $ list EntryList {pnName = pName} (Vect.fromList . (upDir :) $ sortEntries order entries) 1
 
 makeSearchTab :: PaneName -> FilePath -> String -> IO Tab
 makeSearchTab pName filePath searchQuery = do
@@ -75,8 +75,8 @@ makeSearchEntryList :: PaneName -> EntryOrder -> FilePath -> String -> IO (List 
 makeSearchEntryList pName order dir searchQuery = do
   searchResult <- searchRecursive dir searchQuery
   entries <- mapM Entry.make searchResult
-  searchDir <- Entry.make dir
-  return $ list EntryList {pnName = pName} (Vect.fromList . (searchDir {Entry.name = "."} :) $ sortEntries order entries) 1
+  searchDir <- Entry.makeBackDir dir
+  return $ list EntryList {pnName = pName} (Vect.fromList . (searchDir :) $ sortEntries order entries) 1
 
 -- rendering functions
 renderLabel :: (Tab, Bool) -> Widget Name
@@ -175,6 +175,14 @@ keepSelection tab newList = tab {entryList = listMoveTo index newList}
 moveToRow :: Int -> Tab -> Tab
 moveToRow _ Empty = Empty
 moveToRow row tab = tab {entryList = listMoveTo row $ entryList tab}
+
+notifySize :: FilePath -> Entry.Size -> Tab -> Tab
+notifySize _ _ Empty = Empty
+notifySize path size tab = tab {entryList = Entry.notifySize path size <$> entryList tab}
+
+waitingEntries :: Tab -> [Entry.Entry]
+waitingEntries Empty = []
+waitingEntries tab = filter (\x -> Entry.Waiting == Entry.size (Entry.info x)) . toList $ entryList tab
 
 -- utility functions
 selectedEntry :: Tab -> Maybe Entry.Entry

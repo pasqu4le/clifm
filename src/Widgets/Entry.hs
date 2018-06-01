@@ -13,8 +13,9 @@ import Brick.Widgets.Core (vLimit, hBox, str, fill)
 import Data.ByteUnits (ByteValue(..), ByteUnit(Bytes), getShortHand, getAppropriateUnits)
 
 data Entry = Dir {name :: String, path :: FilePath, info :: Info} |
-  File {name :: String, path :: FilePath, info :: Info}
-data Info = Info {size :: Maybe Integer, perms :: Maybe Permissions, times :: Maybe (UTCTime, UTCTime)} deriving Show
+  File {name :: String, path :: FilePath, info :: Info} deriving (Ord)
+data Info = Info {size :: Size, perms :: Maybe Permissions, times :: Maybe (UTCTime, UTCTime)} deriving (Show, Eq, Ord)
+data Size = Waiting | Calculating | Known Integer | Unknown | Avoided deriving (Show, Eq)
 
 instance Show Entry where
   show Dir {name = n} = "+ " ++ n
@@ -25,6 +26,12 @@ instance Eq Entry where
   File {path = p1} == File {path = p2} = p1 == p2
   _ == _ = False
 
+instance Ord Size where
+  compare (Known a) (Known b) = compare a b
+  compare (Known _) _ = GT
+  compare _ (Known _) = LT
+  compare _ _ = EQ
+
 -- creation functions
 make :: FilePath -> IO Entry
 make filePath = do
@@ -34,7 +41,7 @@ make filePath = do
 
 makeInfo :: FilePath -> Bool -> IO Info
 makeInfo filePath isFile = do
-  enSize <- toMaybe <$> try (if isFile then getFileSize filePath else getDirSize filePath)
+  enSize <- getEntrySize filePath isFile
   enPerms <- toMaybe <$> try (getPermissions filePath)
   enTimes <- toMaybe <$> try (getEntryTimes filePath)
   return $ Info enSize enPerms enTimes
@@ -44,6 +51,12 @@ getEntryTimes filePath = do
   accessTime <- getAccessTime filePath
   modifTime <- getModificationTime filePath
   return (accessTime, modifTime)
+
+makeBackDir :: FilePath -> IO Entry
+makeBackDir filePath = do
+  enPerms <- toMaybe <$> try (getPermissions filePath)
+  enTimes <- toMaybe <$> try (getEntryTimes filePath)
+  return $ Dir ".." filePath (Info Avoided enPerms enTimes)
 
 -- rendering functions
 render :: Bool -> Entry -> Widget Name
@@ -87,10 +100,29 @@ hasPermission prop en = case perms $ info en of
 
 shortSize :: Info -> String
 shortSize enInfo = case size enInfo of
-  Just enSize -> getShortHand . getAppropriateUnits $ ByteValue (fromInteger enSize) Bytes
-  _ -> "???"
+  Known enSize -> getShortHand . getAppropriateUnits $ ByteValue (fromInteger enSize) Bytes
+  Unknown -> "???"
+  Calculating -> "..."
+  Waiting -> "..."
+  _ -> ""
+
+notifySize :: FilePath -> Size -> Entry -> Entry
+notifySize p s entry
+  | p == path entry = entry {info = updateSize s $ info entry}
+  | otherwise = entry
+
+updateSize :: Size -> Info -> Info
+updateSize s info = info {size = s}
 
 -- directory size function
+getEntrySize :: FilePath -> Bool -> IO Size
+getEntrySize filePath isFile
+  | isFile = toSizeResult <$> try (getFileSize filePath)
+  | otherwise = return Waiting
+
+toSizeResult :: Either SomeException Integer -> Size
+toSizeResult = either (const Unknown) Known
+
 getDirSize :: FilePath -> IO Integer
 getDirSize filePath = runConduitRes
   $ sourceDirectoryDeep False filePath

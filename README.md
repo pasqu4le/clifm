@@ -68,8 +68,6 @@ If your terminal supports a mouse you can use it to change Tab/Pane, click a but
 
 The actions above will not work only if a prompt is up, or you try to do something not possible.
 
-> NOTE: since version 0.4.1.1 directory size is accurate, calculated by visiting a directory tree to sum it's files sizes (using conduit). In case one of these file's size cannot be read "???" will be displayed. This solution still takes quite some time, during which the app is not responsive, see TODOs.
-
 ## Command line arguments
 You can have a list of command line arguments by running `clifm --help`.
 
@@ -114,5 +112,12 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 >
 > Attribute names with multiple components (e.g. attr1 <> attr2) can be referenced in customization files by separating the names with a dot. For example, the attribute name "list" <> "selected" can be referenced by using the string "list.selected".
 
+#### Threads for directory size computation
+Directory size is calculated by visiting a directory tree to sum it's files sizes (using [conduit](http://hackage.haskell.org/package/conduit)) and it may take a while. For this reason directories size will be calculated in different threads. 
+
+You can limit how many of these threads to have by using `--thread-num` or `-n`, for example: `clifm -n 8`.
+
+You are likely to have the best results with as many threads as your processor's cores. The default limit is set to 4.
+
 ## TODOs
-- find a way to read correctly a directory size without freezing everything
+- wide use of lenses

@@ -7,36 +7,42 @@ import qualified Widgets.Menu as Menu
 import qualified Widgets.Prompt as Prompt
 
 import System.Process (callCommand)
+import Control.Concurrent (forkFinally, ThreadId)
 import Control.Exception (try, SomeException)
 import Control.Monad.IO.Class (liftIO)
+import qualified Data.Set as Set
 import Data.Time.Clock (UTCTime, diffUTCTime, getCurrentTime)
 import Brick.Main (continue, halt, suspendAndResume)
 import Brick.Widgets.Core ((<+>), str, hBox, vBox, vLimit, withBorderStyle)
 import Brick.Types (Widget, BrickEvent(..), EventM, Next, ViewportType(..), Location(..))
 import Brick.Widgets.Border (vBorder, hBorder)
 import Brick.Widgets.Border.Style (unicodeBold)
-import Brick.BChan (BChan)
+import Brick.BChan (BChan, writeBChan)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 import Data.Foldable (toList)
-import Data.List (intersperse)
+import Data.List (intersperse, foldl')
 import Data.List.PointedList (PointedList, _focus, replace, delete, singleton, insert, moveTo, withFocus, find)
 import Data.List.PointedList.Circular (next, previous)
 
-data State = State {paneZipper :: PaneZipper,
+data State = State {
+    paneZipper :: PaneZipper,
     lastPaneName :: PaneName,
     bottomMenu :: Menu.Menu,
     prompt :: Maybe Prompt.Prompt,
     lastClickedEntry :: Maybe (PaneName, Int, UTCTime),
     editorCommand :: String,
-    eventChan :: BChan (ThreadEvent Tab.Tab)
+    eventChan :: EChan Tab.Tab,
+    searchers :: (Int, Int)
   }
 type PaneZipper = PointedList Pane.Pane
 
 -- creation functions
-makeState :: FilePath -> String -> BChan (ThreadEvent Tab.Tab) -> IO State
-makeState path editCom eChan = do
+makeState :: FilePath -> String -> EChan Tab.Tab -> Int -> IO State
+makeState path editCom eChan tNum = do
   pane <- Pane.make 0 path
-  return $ State (singleton pane) 0 Menu.make Nothing Nothing editCom eChan
+  let srcs = (0, if tNum < 1 then 1 else tNum)
+      state = State (singleton pane) 0 Menu.make Nothing Nothing editCom eChan srcs
+  startSearchers (snd srcs) state
 
 -- rendering functions
 drawUi :: State -> [Widget Name]
@@ -56,9 +62,23 @@ renderPanes = hBox . intersperse vBorder . map Pane.render . toList . withFocus
 
 -- event handling functions
 handleEvent :: State -> BrickEvent Name (ThreadEvent Tab.Tab) -> EventM Name (Next State)
-handleEvent state event = case prompt state of
-  Just pr -> handlePrompt event pr state
-  _ -> handleMain event state
+handleEvent state ev = if isSizeEvent ev then handleSize ev state else case prompt state of
+  Just pr -> handlePrompt ev pr state
+  _ -> handleMain ev state
+
+isSizeEvent :: BrickEvent Name (ThreadEvent Tab.Tab) -> Bool
+isSizeEvent (AppEvent ev) = case ev of
+  SizeFound _ _ -> True
+  SizeNotFound _ -> True
+  _ -> False
+isSizeEvent _ = False
+
+handleSize :: BrickEvent Name (ThreadEvent Tab.Tab) -> State -> EventM Name (Next State)
+handleSize (AppEvent ev) state = case ev of
+  SizeFound path val -> manageSearchers . removeSearcher $ notifySize state path (Entry.Known val)
+  SizeNotFound path -> manageSearchers . removeSearcher $ notifySize state path Entry.Unknown
+  _ -> continue state
+handleSize _ state = continue state
 
 handlePrompt :: BrickEvent Name (ThreadEvent Tab.Tab) -> Prompt.Prompt -> State -> EventM Name (Next State)
 handlePrompt ev pr state = do
@@ -103,7 +123,7 @@ handleMain _ = continue
 updateCurrentPane :: (Pane.Pane -> EventM Name Pane.Pane) -> State -> EventM Name (Next State)
 updateCurrentPane func state = do
   newPane <- func $ currentPane state
-  continue $ state {paneZipper = replace newPane $ paneZipper state, prompt = Nothing}
+  manageSearchers $ state {paneZipper = replace newPane $ paneZipper state, prompt = Nothing}
 
 updateMenu :: Menu.MenuType -> State -> EventM Name (Next State)
 updateMenu tp st = continue $ st {bottomMenu = Menu.change tp $ bottomMenu st}
@@ -127,7 +147,7 @@ openPromptWithClip func state = openPrompt (func . Menu.clipboard $ bottomMenu s
 
 clickedEntry :: PaneName -> Int -> State -> EventM Name (Next State)
 clickedEntry pName row state = do
-  currTime <- liftIO $ getCurrentTime
+  currTime <- liftIO getCurrentTime
   let clicked = (pName, row, currTime)
       doubleClick = isDoubleClick (lastClickedEntry state) clicked
   if doubleClick then openEntry $ state {lastClickedEntry = Nothing}
@@ -136,7 +156,7 @@ clickedEntry pName row state = do
 isDoubleClick :: Maybe (PaneName, Int, UTCTime) -> (PaneName, Int, UTCTime) -> Bool
 isDoubleClick lastClick (nPane, nRow, nTime) = case lastClick of
   Nothing -> False
-  Just (pPane, pRow, pTime) -> and [pPane == nPane, pRow == nRow, isSmallDiff]
+  Just (pPane, pRow, pTime) -> (pPane == nPane) && (pRow == nRow) && isSmallDiff
     where isSmallDiff = toRational (diffUTCTime nTime pTime) <= toRational 0.2
 
 openEntry :: State -> EventM Name (Next State)
@@ -181,6 +201,35 @@ nextPane state = continue $ state {paneZipper = next $ paneZipper state}
 
 previousPane :: State -> EventM Name (Next State)
 previousPane state = continue $ state {paneZipper = previous $ paneZipper state}
+
+-- directory entry size / threaded searchers / value update
+removeSearcher :: State -> State
+removeSearcher state = state {searchers = (running - 1, maxNum)}
+  where (running, maxNum) = searchers state
+
+manageSearchers :: State -> EventM Name (Next State)
+manageSearchers state
+  | running >= maxNum = continue state
+  | otherwise = continue =<< liftIO (startSearchers (maxNum - running) state)
+  where (running, maxNum) = searchers state
+
+startSearchers :: Int -> State -> IO State --TODO: lens could really improve this
+startSearchers n state = do
+  let waiting = concatMap Pane.waitingEntries . toList $ paneZipper state
+      toStart = map Entry.path . take n . Set.toList $ Set.fromList waiting
+      (running, maxNum) = searchers state
+      countState = state {searchers = (running + length toStart, maxNum)}
+  mapM_ (startSearcher (eventChan state)) toStart
+  return $ foldl' (\st path -> notifySize st path Entry.Calculating) countState toStart 
+
+startSearcher :: EChan Tab.Tab -> FilePath -> IO ThreadId
+startSearcher eChan path = forkFinally (Entry.getDirSize path) (reportSearch path eChan)
+
+reportSearch :: FilePath -> EChan Tab.Tab -> Either SomeException Integer -> IO ()
+reportSearch path eChan = writeBChan eChan . either (const (SizeNotFound path)) (SizeFound path)
+
+notifySize :: State -> FilePath -> Entry.Size -> State
+notifySize state path size = state {paneZipper = Pane.notifySize path size <$> paneZipper state}
 
 -- pane and paneZipper utility functions
 currentPane :: State -> Pane.Pane
