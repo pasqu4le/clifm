@@ -1,11 +1,10 @@
 module Commons where
 
-import Data.Monoid ((<>))
 import Brick.Widgets.Core (withDefAttr, str)
 import Brick.Types (Widget)
 import Brick.Themes (Theme, newTheme)
 import Brick.AttrMap (AttrName, AttrMap, attrName, attrMap)
-import Graphics.Vty (Key(..), defAttr, withStyle, underline, black, yellow, white, blue, red)
+import Graphics.Vty (Key(..), withStyle, underline, black, yellow, white, blue, red)
 import Brick.Util (on, fg, bg)
 import Brick.BChan (BChan)
 import Brick.Widgets.Edit (editFocusedAttr)

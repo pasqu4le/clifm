@@ -81,7 +81,7 @@ runUI options = do
 
 app :: AttrMap -> App Mngr.State (ThreadEvent Tab.Tab) Name
 app atrm = App {
-    appDraw = Mngr.drawUi,
+    appDraw = Mngr.render,
     appStartEvent = return,
     appHandleEvent = Mngr.handleEvent,
     appAttrMap = const atrm,

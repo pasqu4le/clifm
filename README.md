@@ -25,9 +25,9 @@ $ cabal install
 ```
 
 ## Features
-Clifm is a [brick](https://github.com/jtdaugherty/brick) application, that in turn builds upon [vty](https://github.com/jtdaugherty/vty). As such it supports a large number of terminals, but not on Windows, handles windows resizing and more.
+Clifm is a [brick](https://github.com/jtdaugherty/brick) application, that in turn builds upon [vty](https://github.com/jtdaugherty/vty). As such it supports a large number of terminals (not on Windows), handles resizing and more.
 
-If your terminal supports a mouse you can use it to change Tab/Pane, click a button on the bottom, change your selection or open it (double-click), but only using the keyboard you can perform every possible action. This is the list of all the keybindings:
+If your terminal supports a mouse you can use it to change Tab/Pane, click a button on the bottom, change your selection or open it (double-click), but using the keyboard you can perform every possible action. This is the list of all the keybindings:
 
 #### Bottom menu
 - L: open Se**l**ection menu
@@ -113,11 +113,13 @@ Complete explanation from [Brick.Themes](https://hackage.haskell.org/package/bri
 > Attribute names with multiple components (e.g. attr1 <> attr2) can be referenced in customization files by separating the names with a dot. For example, the attribute name "list" <> "selected" can be referenced by using the string "list.selected".
 
 #### Threads for directory size computation
-Directory size is calculated by visiting a directory tree to sum it's files sizes (using [conduit](http://hackage.haskell.org/package/conduit)) and it may take a while. For this reason directories size will be calculated in different threads. 
+Directory size is calculated by visiting a directory tree to sum it's files sizes (using [conduit](http://hackage.haskell.org/package/conduit)) and it may take a while. For this reason these will be calculated in different threads. 
 
-You can limit how many of these threads to have by using `--thread-num` or `-n`, for example: `clifm -n 8`.
+You can limit how many of these threads to have at the same time by using `--thread-num` or `-n`, for example: `clifm -n 8`.
 
 You are likely to have the best results with as many threads as your processor's cores. The default limit is set to 4.
 
 ## TODOs
-- wide use of lenses
+Right now nothing is planned.
+
+Suggestions and requests are always welcome, if you have any or you find a bug please [open a new issue](https://github.com/pasqu4le/clifm/issues/new).

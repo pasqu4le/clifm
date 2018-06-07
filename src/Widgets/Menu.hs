@@ -4,6 +4,7 @@ import qualified Widgets.Pane as Pane
 import qualified Widgets.Tab as Tab
 import qualified Widgets.Entry as Entry
 
+import Control.Lens
 import Data.Char (toUpper)
 import System.FilePath (takeFileName)
 import Brick.Widgets.Core ((<+>), str, hLimit, hBox, clickable)
@@ -11,33 +12,37 @@ import Brick.Types (Widget)
 import Brick.Widgets.Border (borderWithLabel, border)
 import Graphics.Vty (Event(EvKey), Key(..), Modifier(MCtrl))
 
-data Menu = Menu {clipboard :: Clipboard, menuType :: MenuType}
+data Menu = Menu {_clipboard :: Clipboard, _menuType :: MenuType}
 data MenuType = Main | Selection | Tab | Pane
-data Clipboard = CopyBoard {fromEntry :: Entry.Entry} | CutBoard {fromEntry :: Entry.Entry} | EmptyBoard
+data Clipboard = CopyBoard {_fromEntry :: Entry.Entry} | CutBoard {_fromEntry :: Entry.Entry} | EmptyBoard
 
 instance Show Clipboard where
   show EmptyBoard = " -empty- "
-  show board = takeFileName . Entry.path $ fromEntry board
+  show board = takeFileName $ board ^. fromEntry . Entry.path
 
--- creation functions
+-- lenses
+clipboard :: Lens' Menu Clipboard
+clipboard = lens _clipboard (\menu x -> menu {_clipboard = x})
+
+menuType :: Lens' Menu MenuType
+menuType = lens _menuType (\menu x -> menu {_menuType = x})
+
+fromEntry :: Lens' Clipboard Entry.Entry
+fromEntry = lens _fromEntry (\board x -> board {_fromEntry = x})
+
+-- creation
 make :: Menu
-make = Menu {clipboard = EmptyBoard, menuType = Main}
+make = Menu {_clipboard = EmptyBoard, _menuType = Main}
 
-makeCopyBoard :: Entry.Entry -> Clipboard
-makeCopyBoard = CopyBoard
-
-makeCutBoard :: Entry.Entry -> Clipboard
-makeCutBoard = CutBoard
-
--- rendering functions
+-- rendering
 render :: Menu -> Pane.Pane -> Widget Name
-render m = hBox . (renderClipboard (clipboard m) :) . renderButtons (menuType m)
+render m = hBox . (views clipboard renderClipboard m :) . views menuType renderButtons m
 
 renderButtons :: MenuType -> Pane.Pane -> [Widget Name]
 renderButtons tp pane = map renderButton $ case tp of
   Main -> mainButtons
-  Selection -> (backButton :) . selectionButtons $ Pane.selectedEntry pane
-  Tab -> (backButton :) . tabButtons $ Pane.currentTab pane
+  Selection -> backButton : maybe [] selectionButtons (Pane.selectedEntry pane)
+  Tab -> backButton : views Pane.currentTab tabButtons pane
   Pane -> backButton : paneButtons
 
 renderButton :: (Widget Name, Maybe String, Name) -> Widget Name
@@ -53,11 +58,10 @@ mainButtons = [
     (keybindStr "q" <+> str "uit", Nothing, Button {keyBind = KChar 'q', withCtrl = False})
   ]
 
-selectionButtons :: Maybe Entry.Entry -> [(Widget Name, Maybe String, Name)]
-selectionButtons e = case e of
-  Just Entry.File {} -> anySelectionButtons
-  Just Entry.Dir {} -> anySelectionButtons ++ [(keybindStr "o" <+> str "pen in new tab", ctrlText 'o', Button {keyBind = KChar 'o', withCtrl = True})]
-  _ -> []
+selectionButtons :: Entry.Entry -> [(Widget Name, Maybe String, Name)]
+selectionButtons e
+  | Entry.isDir e = anySelectionButtons ++ [(keybindStr "o" <+> str "pen in new tab", ctrlText 'o', Button {keyBind = KChar 'o', withCtrl = True})]
+  | otherwise = anySelectionButtons
 
 anySelectionButtons :: [(Widget Name, Maybe String, Name)]
 anySelectionButtons = [
@@ -69,10 +73,11 @@ anySelectionButtons = [
   ]
 
 tabButtons :: Tab.Tab -> [(Widget Name, Maybe String, Name)]
-tabButtons tab = case tab of
-  Tab.Dir {Tab.entryOrder = order} -> dirTabButtons ++ entryTabButtons order ++ anyTabButtons
-  Tab.Search {Tab.entryOrder = order} -> entryTabButtons order ++ anyTabButtons
-  _ -> anyTabButtons
+tabButtons tab
+  | Tab.isDir tab = dirTabButtons ++ entryTabButtons orderType ++ anyTabButtons
+  | Tab.isSearch tab = entryTabButtons orderType ++ anyTabButtons
+  | otherwise = anyTabButtons
+  where orderType = view Tab.orderType tab
 
 dirTabButtons :: [(Widget Name, Maybe String, Name)]
 dirTabButtons = [
@@ -82,10 +87,10 @@ dirTabButtons = [
     (keybindStr "t" <+> str "ouch file", Nothing, Button {keyBind = KChar 't', withCtrl = False})
   ]
 
-entryTabButtons :: Tab.EntryOrder -> [(Widget Name, Maybe String, Name)]
-entryTabButtons order = [
+entryTabButtons :: Tab.OrderType -> [(Widget Name, Maybe String, Name)]
+entryTabButtons orderType = [
     (keybindStr "r" <+> str "efresh", Nothing, Button {keyBind = KChar 'r', withCtrl = False}),
-    (keybindStr "o" <+> str ("rder by " ++ (show . Tab.nextOrderType $ Tab.orderType order)), Nothing, Button {keyBind = KChar 'o', withCtrl = False}),
+    (keybindStr "o" <+> str ("rder by " ++ show (Tab.nextOrderType orderType)), Nothing, Button {keyBind = KChar 'o', withCtrl = False}),
     (keybindStr "i" <+> str "nvert order", Nothing, Button {keyBind = KChar 'i', withCtrl = False})
   ]
 
@@ -111,9 +116,15 @@ backButton = (str "<_", Nothing, Button {keyBind = KBS, withCtrl = False})
 renderClipboard :: Clipboard -> Widget Name
 renderClipboard = hLimit 24 . borderWithLabel (str "clipboard") . str . show
 
--- state changing functions
-change :: MenuType -> Menu -> Menu
-change tp menu = menu {menuType = tp}
+-- utility
+isEmpty :: Clipboard -> Bool
+isEmpty EmptyBoard = True
+isEmpty _ = False
 
-changeClipboard :: Clipboard -> Menu -> Menu
-changeClipboard cb menu = menu {clipboard = cb}
+isCopy :: Clipboard -> Bool
+isCopy CopyBoard {} = True
+isCopy _ = False
+
+isCut :: Clipboard -> Bool
+isCut CutBoard {} = True
+isCut _ = False
