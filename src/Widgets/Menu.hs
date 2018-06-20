@@ -27,8 +27,8 @@ clipboard = lens _clipboard (\menu x -> menu {_clipboard = x})
 menuType :: Lens' Menu MenuType
 menuType = lens _menuType (\menu x -> menu {_menuType = x})
 
-fromEntry :: Lens' Clipboard Entry.Entry
-fromEntry = lens _fromEntry (\board x -> board {_fromEntry = x})
+fromEntry :: Traversal' Clipboard Entry.Entry
+fromEntry = filtered (not . isEmpty) . lens _fromEntry (\board x -> board {_fromEntry = x})
 
 -- creation
 make :: Menu
@@ -77,7 +77,7 @@ tabButtons tab
   | Tab.isDir tab = dirTabButtons ++ entryTabButtons orderType ++ anyTabButtons
   | Tab.isSearch tab = entryTabButtons orderType ++ anyTabButtons
   | otherwise = anyTabButtons
-  where orderType = view Tab.orderType tab
+  where (Just orderType) = preview Tab.orderType tab
 
 dirTabButtons :: [(Widget Name, Maybe String, Name)]
 dirTabButtons = [

@@ -29,9 +29,8 @@ tabZipper = lens _tabZipper (\pane x -> pane {_tabZipper = x})
 currentTab :: Lens' Pane Tab.Tab
 currentTab = tabZipper.focus
 
---NOTE: needs to filter empty tabs, or it will fail
 entries :: Traversal' Pane Entry.Entry
-entries = tabZipper.traverse.filtered (not . Tab.isEmpty).Tab.entries
+entries = tabZipper.traverse.Tab.entries
 
 -- creation
 empty :: PaneName -> Pane

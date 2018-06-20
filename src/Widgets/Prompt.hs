@@ -8,6 +8,7 @@ import Control.Lens
 import Data.Monoid ((<>))
 import Data.Functor (($>))
 import Control.Monad(when,forM_)
+import Data.Maybe (fromJust)
 import Control.Monad.IO.Class (liftIO)
 import Control.Concurrent (forkFinally, ThreadId, killThread)
 import Control.Exception (try, throw, displayException, SomeException, fromException)
@@ -69,8 +70,8 @@ paste clip tab pName = let
     | Menu.isEmpty clip = DisplayError "The clipboard is empty"
     | Tab.isEmpty tab = DisplayError "You cannot paste into an empty tab"
     | Tab.isSearch tab = DisplayError "You cannot paste into a search tab"
-    | Menu.isCopy clip = Copy (clip ^. Menu.fromEntry) (tab ^. Tab.path)
-    | Menu.isCut clip = Cut (clip ^. Menu.fromEntry) (tab ^. Tab.path)
+    | Menu.isCopy clip = Copy (fromJust $ preview Menu.fromEntry clip) (tab ^. Tab.path)
+    | Menu.isCut clip = Cut (fromJust $ preview Menu.fromEntry clip) (tab ^. Tab.path)
     | otherwise = DisplayError "Cannot paste: unknown error"
   in Prompt tab pName checked
 

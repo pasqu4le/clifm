@@ -120,6 +120,8 @@ You can limit how many of these threads to have at the same time by using `--thr
 You are likely to have the best results with as many threads as your processor's cores. The default limit is set to 4.
 
 ## TODOs
-Right now nothing is planned.
+- use conduit for file operations
+
+Right now nothing else is planned.
 
 Suggestions and requests are always welcome, if you have any or you find a bug please [open a new issue](https://github.com/pasqu4le/clifm/issues/new).

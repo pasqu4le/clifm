@@ -5,7 +5,7 @@ import qualified Widgets.Entry as Entry
 import Control.Lens hiding (Empty)
 import Data.List (sortOn, isInfixOf, elemIndex)
 import Data.Char (toLower)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, fromJust)
 import Data.Time.Clock (UTCTime(..), secondsToDiffTime)
 import Data.Time.Calendar (Day(ModifiedJulianDay))
 import System.FilePath (takeFileName, takeDirectory, (</>))
@@ -41,25 +41,25 @@ instance Show OrderType where
   show ModificationTime = "modified"
 
 -- lenses
-name :: Lens' Tab String
-name = lens _name (\tab n -> tab {_name = n})
+name :: Traversal' Tab String
+name = unlessEmpty . lens _name (\tab n -> tab {_name = n})
 
-path :: Lens' Tab FilePath
-path = lens _path (\tab n -> tab {_path = n})
+path :: Traversal' Tab FilePath
+path = unlessEmpty . lens _path (\tab n -> tab {_path = n})
 
-entryList :: Lens' Tab (List Name Entry.Entry)
-entryList = lens _entryList (\tab n -> tab {_entryList = n})
+entryList :: Traversal' Tab (List Name Entry.Entry)
+entryList = unlessEmpty . lens _entryList (\tab n -> tab {_entryList = n})
 
-entryOrder :: Lens' Tab EntryOrder
-entryOrder = lens _entryOrder (\tab n -> tab {_entryOrder = n})
+entryOrder :: Traversal' Tab EntryOrder
+entryOrder = unlessEmpty . lens _entryOrder (\tab n -> tab {_entryOrder = n})
 
-query :: Lens' Tab String
-query = lens _query (\tab n -> tab {_query = n})
+query :: Traversal' Tab String
+query = onSearch . lens _query (\tab n -> tab {_query = n})
 
-orderType :: Lens' Tab OrderType
+orderType :: Traversal' Tab OrderType
 orderType = entryOrder.entryOrderType
 
-orderInverted :: Lens' Tab Bool
+orderInverted :: Traversal' Tab Bool
 orderInverted = entryOrder.entryOrderInverted
 
 entryOrderType :: Lens' EntryOrder OrderType
@@ -68,7 +68,12 @@ entryOrderType = lens _orderType (\tab n -> tab {_orderType = n})
 entryOrderInverted :: Lens' EntryOrder Bool
 entryOrderInverted = lens _inverted (\tab n -> tab {_inverted = n})
 
---NOTE: remember that it will fail for Empty tabs
+onSearch :: Traversal' Tab Tab
+onSearch = filtered isSearch
+
+unlessEmpty :: Traversal' Tab Tab
+unlessEmpty = filtered (not . isEmpty)
+
 entries :: Traversal' Tab Entry.Entry
 entries = entryList.traverse
 
@@ -132,9 +137,7 @@ renderSeparator tab = hBox [
   ]
 
 renderEntryOrder :: Tab -> Widget Name
-renderEntryOrder tab = str $ case tab of
-  Empty -> ""
-  _ -> " by " ++ views entryOrder show tab
+renderEntryOrder = str . maybe "" (" by " ++) . previews entryOrder show
 
 renderPath :: Tab -> Widget Name
 renderPath tab = str $ case tab of
@@ -143,7 +146,10 @@ renderPath tab = str $ case tab of
   Search {_path = p, _query = q} -> " search for " ++ q ++ " in " ++ takeFileName p
 
 renderContent :: Bool -> Tab -> Widget Name
-renderContent _ Empty = vBox (lns ++ [fill ' '])
+renderContent hasFoc = maybe emptyContent (renderList Entry.render hasFoc) . preview entryList
+
+emptyContent :: Widget Name
+emptyContent = vBox (lns ++ [fill ' '])
   where lns = map strWrap $ lines "Command Line Interface File Manager\n \n\
     \clifm allows you to explore directories on multiple tabs.\nIf your terminal\
     \ has mouse support you can click on some elements to interact with them, \
@@ -154,33 +160,29 @@ renderContent _ Empty = vBox (lns ++ [fill ' '])
     \BackTab key or use Ctrl + Left or Right arrow key to swap them.\n \nYou can \
     \see every other possible action as a button in the bottom, or you can use \
     \them as Keys combination.\n \nTo see them all please refer to the README"
-renderContent hasFocus tab = views entryList (renderList Entry.render hasFocus) tab
 
 -- event handling and state-changing
 handleEvent :: Event -> Tab -> EventM Name Tab
-handleEvent _ Empty = return Empty
-handleEvent event tab = case event of
-  EvKey (KChar 'o') [] -> return $ changeOrder tab
-  EvKey (KChar 'i') [] -> return $ invertOrder tab
-  _ -> entryList (handleListEvent event) tab
+handleEvent event = case event of
+  EvKey (KChar 'o') [] -> return . changeOrder
+  EvKey (KChar 'i') [] -> return . invertOrder
+  _ -> entryList (handleListEvent event)
 
 changeOrder :: Tab -> Tab
-changeOrder Empty = Empty
 changeOrder tab = tab
   & entryOrder .~ newOrder
   & entryList.listElementsL._tail .~ sorted
   & entryList.listSelectedL ?~ maybe 0 (+1) ((`Vect.elemIndex` sorted) =<< selectedEntry tab)
   where
-    newOrder = over entryOrderType nextOrderType $ view entryOrder tab
+    newOrder = over entryOrderType nextOrderType . fromJust $ preview entryOrder tab
     sorted = Vect.fromList . sortEntries newOrder . toList $ view (entryList.listElementsL._tail) tab
 
 invertOrder :: Tab -> Tab
-invertOrder Empty = Empty
-invertOrder tab = tab 
+invertOrder tab = tab
   & orderInverted %~ not 
   & entryList.listElementsL._tail %~ Vect.reverse
   & entryList.listSelectedL %~ fmap (\idx -> if idx == 0 then 0 else size - idx)
-  where size = views (entryList.listElementsL) Vect.length tab
+  where size = fromJust $ previews (entryList.listElementsL) Vect.length tab
 
 reload :: PaneName -> Tab -> IO Tab
 reload pName tab = case tab of
@@ -195,8 +197,7 @@ keepSelection tab newList = tab
   where newElems = listElements newList
 
 moveToRow :: Int -> Tab -> Tab
-moveToRow _ Empty = Empty
-moveToRow row tab = tab & entryList %~ listMoveTo row
+moveToRow row = over entryList (listMoveTo row)
 
 -- utility
 isDir :: Tab -> Bool
@@ -213,7 +214,7 @@ isEmpty _ = False
 
 selectedEntry :: Tab -> Maybe Entry.Entry
 selectedEntry Empty = Nothing
-selectedEntry tab = snd <$> listSelectedElement (view entryList tab)
+selectedEntry tab = snd <$> listSelectedElement (fromJust $ preview entryList tab)
 
 nextOrderType :: OrderType -> OrderType
 nextOrderType order
