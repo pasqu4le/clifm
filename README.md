@@ -1,3 +1,7 @@
+<p align="center"><img src="src/logo/Logo1.png" alt="clifm" height="250px"></p>
+
+
+
 # Command Line Interface File Manager
 Clifm is a small file manager written in Haskell with a terminal-based interface. It allows you to explore directories in multiple Panes/Tabs and perform basic operations.
 
