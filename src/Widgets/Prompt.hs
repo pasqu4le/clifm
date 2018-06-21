@@ -25,7 +25,7 @@ import Data.Time.Format (formatTime, defaultTimeLocale)
 import Conduit
 import System.FilePath (isValid, takeDirectory, (</>), takeFileName, makeRelative)
 import System.Directory (doesFileExist, doesDirectoryExist, createDirectory, renameFile,
-  copyFileWithMetadata, removeFile, removeDirectoryRecursive, createDirectoryIfMissing
+  copyFileWithMetadata, removeFile, removeDirectoryRecursive, createDirectoryIfMissing,
   readable, writable, executable, searchable)
 
 data Prompt = Prompt {_originTab :: Tab.Tab, _originPane :: PaneName, _action :: Action} deriving Show
