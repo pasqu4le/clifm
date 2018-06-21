@@ -1,4 +1,4 @@
-<p align="center"><img src="src/logo/Logo1.png" alt="clifm" height="250px"></p>
+<p align="center"><img src="logo/Logo1.png" alt="clifm" height="250px"></p>
 
 
 
@@ -7,7 +7,7 @@ Clifm is a small file manager written in Haskell with a terminal-based interface
 
 ![screenshot](https://github.com/pasqu4le/clifm/raw/master/screenshot.png)
 
-> Note: this is still an experiment. Directory navigation will do no harm, but double-check before starting operations on your file system. I take no responsibility for what you do with this software.
+> Note: Directory navigation will do no harm, but double-check before starting operations on your file system. I take no responsibility for what you do with this software.
 
 ## Installation
 > Note: You may need to install `ncurses` on your system before using clifm
@@ -127,3 +127,5 @@ You are likely to have the best results with as many threads as your processor's
 Right now nothing is planned.
 
 Suggestions and requests are always welcome, if you have any or you find a bug please [open a new issue](https://github.com/pasqu4le/clifm/issues/new).
+
+Special thanks to [@batarian71](https://github.com/batarian71) for the logo.
