@@ -22,9 +22,10 @@ import qualified Brick.Widgets.Edit as Edit
 import Brick.BChan (BChan, writeBChan)
 import Graphics.Vty (Event(EvKey), Key(..))
 import Data.Time.Format (formatTime, defaultTimeLocale)
-import System.FilePath (isValid, takeDirectory, (</>), takeFileName)
+import Conduit
+import System.FilePath (isValid, takeDirectory, (</>), takeFileName, makeRelative)
 import System.Directory (doesFileExist, doesDirectoryExist, createDirectory, renameFile,
-  copyFileWithMetadata, removeFile, removeDirectoryRecursive, getDirectoryContents,
+  copyFileWithMetadata, removeFile, removeDirectoryRecursive, createDirectoryIfMissing
   readable, writable, executable, searchable)
 
 data Prompt = Prompt {_originTab :: Tab.Tab, _originPane :: PaneName, _action :: Action} deriving Show
@@ -310,31 +311,18 @@ notifyActionSize path size act = case act of
 
 -- files functions not covered by System.Directory nor System.FilePath
 moveFileWithMetadata :: FilePath -> FilePath -> IO ()
-moveFileWithMetadata o d = do
-  copyFileWithMetadata o d
-  removeFile o
+moveFileWithMetadata src dst = do
+  copyFileWithMetadata src dst
+  removeFile src
 
 moveDirectoryRecursive :: FilePath -> FilePath -> IO ()
-moveDirectoryRecursive o d = do
-  copyDirectoryRecursive o d
-  removeDirectoryRecursive o
+moveDirectoryRecursive src dst = do
+  copyDirectoryRecursive src dst
+  removeDirectoryRecursive src
 
--- taken from https://stackoverflow.com/questions/6807025/what-is-the-haskell-way-to-copy-a-directory
 copyDirectoryRecursive ::  FilePath -> FilePath -> IO ()
-copyDirectoryRecursive src dst = do
-  whenM (not <$> doesDirectoryExist src) $ throw (userError "source does not exist")
-  whenM (doesFileOrDirectoryExist dst) $ throw (userError "destination already exists")
-  createDirectory dst
-  content <- getDirectoryContents src
-  let xs = filter (`notElem` [".", ".."]) content
-  forM_ xs $ \name -> do
-    let srcPath = src </> name
-    let dstPath = dst </> name
-    isDirectory <- doesDirectoryExist srcPath
-    if isDirectory
-      then copyDirectoryRecursive srcPath dstPath
-      else copyFileWithMetadata srcPath dstPath
-  where
-    doesFileOrDirectoryExist x = orM [doesDirectoryExist x, doesFileExist x]
-    orM xs = or <$> sequence xs
-    whenM s r = s >>= flip when r
+copyDirectoryRecursive src dst = runConduitRes
+  $ sourceDirectoryDeep False src
+  .| mapC (\fPath -> (fPath, dst </> (makeRelative src fPath)))
+  .| iterMC (liftIO . createDirectoryIfMissing True . takeDirectory . snd)
+  .| mapM_C (\(srcFile, dstFile)  -> liftIO $ copyFileWithMetadata srcFile dstFile)

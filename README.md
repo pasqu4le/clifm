@@ -1,7 +1,7 @@
 # Command Line Interface File Manager
 Clifm is a small file manager written in Haskell with a terminal-based interface. It allows you to explore directories in multiple Panes/Tabs and perform basic operations.
 
-![screenshot](screenshot.png)
+![screenshot](https://github.com/pasqu4le/clifm/raw/master/screenshot.png)
 
 > Note: this is still an experiment. Directory navigation will do no harm, but double-check before starting operations on your file system. I take no responsibility for what you do with this software.
 
@@ -120,8 +120,6 @@ You can limit how many of these threads to have at the same time by using `--thr
 You are likely to have the best results with as many threads as your processor's cores. The default limit is set to 4.
 
 ## TODOs
-- use conduit for file operations
-
-Right now nothing else is planned.
+Right now nothing is planned.
 
 Suggestions and requests are always welcome, if you have any or you find a bug please [open a new issue](https://github.com/pasqu4le/clifm/issues/new).

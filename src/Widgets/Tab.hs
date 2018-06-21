@@ -8,6 +8,7 @@ import Data.Char (toLower)
 import Data.Maybe (fromMaybe, fromJust)
 import Data.Time.Clock (UTCTime(..), secondsToDiffTime)
 import Data.Time.Calendar (Day(ModifiedJulianDay))
+import Conduit
 import System.FilePath (takeFileName, takeDirectory, (</>))
 import System.Directory (doesDirectoryExist, doesFileExist, listDirectory)
 import Brick.Types (Widget, EventM)
@@ -236,19 +237,7 @@ zeroTime :: UTCTime
 zeroTime = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
 
 searchRecursive :: FilePath -> String -> IO [FilePath]
-searchRecursive filePath searchQuery = do
-  subNames <- listDirectory filePath
-  filePaths <- listRecursive $ map (filePath </>) subNames
-  return $ filter (isInfixOf searchQuery . takeFileName) filePaths
-
-listRecursive :: [FilePath] -> IO [FilePath]
-listRecursive [] = return []
-listRecursive (filePath:filePaths) = do
-  isDir <- doesDirectoryExist filePath
-  isFile <- doesFileExist filePath
-  if isFile then (filePath :) <$> listRecursive filePaths
-  else if isDir then do
-    subNames <- listDirectory filePath
-    let subPaths = map (filePath </>) subNames
-    (filePath :) <$> listRecursive (subPaths ++ filePaths)
-  else listRecursive filePaths
+searchRecursive filePath searchQuery = runConduitRes
+  $ sourceDirectoryDeep False filePath
+  .| filterC (isInfixOf searchQuery . takeFileName)
+  .| sinkList
