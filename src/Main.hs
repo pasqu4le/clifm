@@ -5,6 +5,7 @@ import qualified Widgets.Tab as Tab
 
 import Options.Applicative
 import System.Directory (doesDirectoryExist, doesFileExist, makeAbsolute)
+import System.Environment (lookupEnv)
 import Data.Semigroup ((<>))
 import Control.Monad (void)
 import Brick.Main (customMain, showFirstCursor, App(..))
@@ -16,7 +17,13 @@ import Graphics.Vty (mkVty, standardIOConfig, setMode, outputIface, Mode(Mouse))
 -- entry point: parses the arguments and starts the brick application
 
 -- options
-data FMOptions = FMOptions {dirPath :: FilePath, editComm :: String, themeType :: ThemeType, threadNum :: Int}
+data FMOptions = FMOptions {
+    dirPath :: FilePath,
+    editorType :: EditorType,
+    themeType :: ThemeType,
+    threadNum :: Int
+  }
+data EditorType = CustomEditor String | DefaultEditor
 data ThemeType = CustomTheme FilePath | DefaultTheme
 
 -- argument parsing functions
@@ -29,12 +36,7 @@ opts = FMOptions
     <> help "Directory to open"
     <> showDefault
     <> value ".")
-  <*> strOption
-    ( long "editor"
-    <> short 'e'
-    <> help "Editor command/path (file path will be appended to this)"
-    <> showDefault
-    <> value "nano")
+  <*> (customEditor <|> defEditor)
   <*> (customTheme <|> defTheme)
   <*> option auto
     ( long "thread-num"
@@ -44,6 +46,16 @@ opts = FMOptions
     <> value 4
     <> metavar "INT")
 
+customEditor :: Parser EditorType
+customEditor = CustomEditor <$> strOption
+    ( long "editor"
+    <> short 'e'
+    <> help "Editor command/path (file path will be appended to this)")
+
+defEditor :: Parser EditorType
+defEditor = flag DefaultEditor DefaultEditor
+  ( long "default-editor"
+  <> help "Looks for VISUAL then EDITOR environment vars. Uses nano if both don't exist" )
 
 customTheme :: Parser ThemeType
 customTheme = CustomTheme <$> strOption
@@ -70,13 +82,14 @@ runUI options = do
   isDir <- doesDirectoryExist $ dirPath options
   path <- if isDir then makeAbsolute $ dirPath options else return []
   theme <- loadTheme $ themeType options
+  editComm <- findEditor $ editorType options
   let atrm = themeToAttrMap theme
       buildVty = do
         v <- mkVty =<< standardIOConfig
         setMode (outputIface v) Mouse True
         return v
   eventChan <- Brick.BChan.newBChan 10
-  state <- Mngr.makeState path (editComm options) eventChan (threadNum options)
+  state <- Mngr.makeState path editComm eventChan (threadNum options)
   void $ customMain buildVty (Just eventChan) (app atrm) state
 
 app :: AttrMap -> App Mngr.State (ThreadEvent Tab.Tab) Name
@@ -87,6 +100,18 @@ app atrm = App {
     appAttrMap = const atrm,
     appChooseCursor = showFirstCursor
   }
+
+findEditor :: EditorType -> IO String
+findEditor (CustomEditor command) = return command
+findEditor DefaultEditor = do
+  visualEnv <- lookupEnv "VISUAL"
+  case visualEnv of
+    Just command -> return command
+    Nothing -> do
+      editorEnv <- lookupEnv "EDITOR"
+      case editorEnv of 
+        Just command -> return command
+        _ -> return "nano"
 
 loadTheme :: ThemeType -> IO Theme
 loadTheme selTheme = case selTheme of

@@ -80,6 +80,12 @@ If you specify nothing `clifm` will open the current directory, but you can sele
 
 If the directory path is not valid `clifm` will open on an empty tab.
 
+#### Text Editor
+By default `clifm` will look for an editor in your environment variables: `$VISUAL` and `$EDITOR` (in this order).
+If both cannot be found it will try to use `nano`.
+
+You can select an editor with the option `--editor` or `-e`, for example: `clifm -e nano`
+
 #### Themes
 You can load a theme from a file using `--theme` or `-t`, for example: `clifm -t "theme/phosphor.ini"`. If the file does not exists or cannot be loaded `clifm` will use the default theme.
 
