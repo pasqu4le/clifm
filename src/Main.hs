@@ -1,3 +1,5 @@
+{-# LANGUAGE CPP #-}
+
 module Main where
 import Commons
 import qualified Widgets.Manager as Mngr
@@ -88,9 +90,16 @@ runUI options = do
         v <- mkVty =<< standardIOConfig
         setMode (outputIface v) Mouse True
         return v
+#if MIN_VERSION_brick(0,47,0)
+  initialVty <- buildVty
+#endif
   eventChan <- Brick.BChan.newBChan 10
   state <- Mngr.makeState path editComm eventChan (threadNum options)
-  void $ customMain buildVty (Just eventChan) (app atrm) state
+  void $ customMain
+#if MIN_VERSION_brick(0,47,0)
+           initialVty
+#endif
+           buildVty (Just eventChan) (app atrm) state
 
 app :: AttrMap -> App Mngr.State (ThreadEvent Tab.Tab) Name
 app atrm = App {
@@ -109,7 +118,7 @@ findEditor DefaultEditor = do
     Just command -> return command
     Nothing -> do
       editorEnv <- lookupEnv "EDITOR"
-      case editorEnv of 
+      case editorEnv of
         Just command -> return command
         _ -> return "nano"
 
